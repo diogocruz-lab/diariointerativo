@@ -1,0 +1,3030 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Fluxo de Professores em Sala</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fluxo">
+<meta name="theme-color" content="#1e3a8a">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<!-- ================= FIREBASE MODULE ================= -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+  import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+  import { 
+    getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, 
+    collection, getDocs, addDoc, onSnapshot, serverTimestamp, 
+    enableIndexedDbPersistence 
+  } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+  // Configuração do projeto Firebase (diario-interativo-4d43b)
+  const firebaseConfig = {
+    apiKey: "AIzaSyBw28BX96jMm9cDBTyB2LPNlodQbwBXw4U",
+    authDomain: "diario-interativo-4d43b.firebaseapp.com",
+    databaseURL: "https://diario-interativo-4d43b-default-rtdb.firebaseio.com",
+    projectId: "diario-interativo-4d43b",
+    storageBucket: "diario-interativo-4d43b.firebasestorage.app",
+    messagingSenderId: "865941250066",
+    appId: "1:865941250066:web:b19710419bcd0a5e88b8cb"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  // Cache offline para o app funcionar mesmo sem internet
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') console.warn('Multi-tab Firestore');
+    else if (err.code === 'unimplemented') console.warn('Sem suporte a cache offline');
+  });
+
+  window.fb = {
+    app, auth, db,
+    signInAnonymously,
+    doc, getDoc, setDoc, updateDoc, deleteDoc,
+    collection, getDocs, addDoc, onSnapshot, serverTimestamp
+  };
+  window.fbReady = true;
+  window.dispatchEvent(new Event('fb-ready'));
+</script>
+
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif; background:#f5f7fb; color:#1a2138; line-height:1.5; padding-bottom:80px; -webkit-tap-highlight-color: transparent; }
+  header { background:linear-gradient(135deg,#1e3a8a,#2563eb); color:#fff; padding:16px 24px; display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; position:sticky; top:0; z-index:50; box-shadow:0 2px 12px rgba(0,0,0,.15); }
+  .brand { display:flex; align-items:center; gap:14px; }
+  .brand-icon { font-size:2rem; }
+  .brand h1 { margin:0; font-size:1.15rem; font-weight:700; }
+  .brand p { margin:0; font-size:.8rem; opacity:.8; }
+  .header-info { text-align:right; }
+  .clock { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; transition: color 0.3s; }
+  .clock.simulated { color: #fbbf24; }
+  .date { font-size:.8rem; opacity:.85; text-transform:capitalize; }
+  .shift-badge { display:inline-block; margin-top:6px; padding:3px 10px; border-radius:999px; font-size:.75rem; font-weight:700; background:rgba(255,255,255,.15); border:1px solid rgba(255,255,255,.3); }
+  .shift-badge.open { background:rgba(16,185,129,.35); border-color:rgba(16,185,129,.5); }
+  .shift-badge.closed { background:rgba(239,68,68,.35); border-color:rgba(239,68,68,.5); }
+  .shift-badge.interval { background:rgba(245,158,11,.45); border-color:rgba(245,158,11,.7); }
+  nav.tabs { display:flex; gap:4px; padding:10px 24px; background:#fff; border-bottom:1px solid #e5e7eb; overflow-x:auto; position:sticky; top:84px; z-index:40; }
+  .tab { border:0; background:transparent; padding:8px 16px; border-radius:999px; font-weight:600; font-size:.9rem; color:#6b7280; cursor:pointer; white-space:nowrap; transition:all .15s; }
+  .tab.active { background:#2563eb; color:#fff; }
+  .tab:hover:not(.active) { background:#f3f4f6; color:#1a2138; }
+  main { max-width:1280px; margin:0 auto; padding:20px 16px; }
+  .tab-content { display:none; }
+  .tab-content.active { display:block; animation:fadeIn .2s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px);} to{opacity:1;transform:translateY(0);} }
+  .painel-toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; padding:12px 16px; background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .painel-toolbar label { font-size:.8rem; font-weight:600; color:#6b7280; }
+  .painel-toolbar select, .painel-toolbar input[type="text"] { font:inherit; font-size:.9rem; padding:7px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+  .sim-bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; padding:12px 16px; background:#fffbeb; border:1px solid #fde68a; border-radius:12px; }
+  .sim-bar label { font-size:.85rem; font-weight:700; color:#92400e; }
+  .sim-bar input[type="time"] { font:inherit; font-size:.9rem; padding:6px 10px; border:1px solid #f59e0b; border-radius:8px; background:#fff; color:#92400e; font-weight:700; }
+  .sim-bar .hint { font-size:.75rem; color:#92400e; opacity:0.8; margin-left:auto; }
+  .painel-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .painel-col { background:#fff; border-radius:14px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.06); min-height:200px; }
+  .painel-col h2 { margin:0 0 12px; font-size:.95rem; text-transform:uppercase; letter-spacing:.05em; color:#374151; display:flex; align-items:center; gap:6px; padding-bottom:10px; border-bottom:2px solid #f3f4f6; }
+  .painel-col .count { margin-left:auto; margin-right:8px; font-size:.75rem; background:#f3f4f6; color:#6b7280; padding:1px 8px; border-radius:999px; font-weight:600; }
+  .col-em-sala h2 { color:#065f46; border-bottom-color:#d1fae5; }
+  .col-proximos h2 { color:#92400e; border-bottom-color:#fef3c7; }
+  .col-saidos h2 { color:#374151; border-bottom-color:#e5e7eb; }
+  .btn-clear { background: transparent; border: 0; cursor: pointer; font-size: 1.1rem; opacity: 0.6; padding: 0; line-height: 1; }
+  .btn-clear:hover { opacity: 1; }
+  .col-empty { color:#9ca3af; font-style:italic; font-size:.85rem; text-align:center; padding:20px 8px; }
+  .prof-card { display:flex; align-items:flex-start; gap:10px; padding:10px 12px; border-radius:10px; margin-bottom:8px; background:#fafbfc; border:1px solid #e5e7eb; border-left:4px solid var(--cor,#2563eb); position:relative; }
+  .prof-card.em { background:#ecfdf5; border-color:#a7f3d0; border-left-color:var(--cor,#10b981); }
+  .prof-card.prox { background:#fffbeb; border-color:#fde68a; border-left-color:var(--cor,#f59e0b); }
+  .prof-card.saiu { background:#f9fafb; opacity:.85; }
+  .prof-avatar { width:34px; height:34px; border-radius:50%; background:var(--cor,#2563eb); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:.8rem; flex-shrink:0; text-transform:uppercase; }
+  .prof-info { flex:1; min-width:0; }
+  .prof-name { font-weight:700; font-size:.9rem; }
+  .prof-class { font-size:.78rem; color:#4b5563; margin-top:2px; }
+  .prof-time { font-size:.72rem; color:#9ca3af; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .prof-progress { height:4px; background:#e5e7eb; border-radius:999px; margin-top:6px; overflow:hidden; }
+  .prof-progress-bar { height:100%; background:var(--cor,#10b981); transition:width .5s; }
+  .fila-list { display:flex; flex-direction:column; gap:8px; }
+  .fila-item { display:flex; align-items:center; gap:14px; background:#fff; border-radius:10px; padding:10px 14px; border-left:4px solid var(--cor,#2563eb); box-shadow:0 1px 3px rgba(0,0,0,.05); }
+  .fila-time { font-weight:700; font-size:.95rem; font-variant-numeric:tabular-nums; color:#1a2138; min-width:110px; }
+  .fila-prof { font-weight:600; font-size:.9rem; }
+  .fila-class { font-size:.8rem; color:#6b7280; }
+  .fila-countdown { margin-left:auto; font-size:.75rem; font-weight:700; padding:3px 10px; border-radius:999px; background:#eff6ff; color:#1e40af; white-space:nowrap; }
+  .fila-countdown.urgent { background:#fef3c7; color:#92400e; }
+  .fila-countdown.now { background:#dcfce7; color:#166534; }
+  .hist-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center; }
+  .hist-toolbar select, .hist-toolbar input[type="date"] { font:inherit; font-size:.85rem; padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+  .hist-table { width:100%; border-collapse:collapse; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); font-size:.85rem; }
+  .hist-table th { background:#f9fafb; text-align:left; padding:10px 12px; font-size:.72rem; text-transform:uppercase; letter-spacing:.04em; color:#6b7280; border-bottom:1px solid #e5e7eb; }
+  .hist-table td { padding:8px 12px; border-bottom:1px solid #f3f4f6; font-variant-numeric:tabular-nums; }
+  .hist-table tr:last-child td { border-bottom:0; }
+  .tag { display:inline-block; font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:999px; white-space:nowrap; }
+  .tag.auto-ini { background:#dcfce7; color:#166534; }
+  .tag.auto-fim { background:#fee2e2; color:#991b1b; }
+  .tag.man-ini { background:#dbeafe; color:#1e40af; }
+  .tag.man-fim { background:#ede9fe; color:#6b21a8; }
+  .tag.alert { background:#fef3c7; color:#92400e; }
+  .empty-state { text-align:center; padding:40px 20px; color:#9ca3af; font-style:italic; }
+  .grade-toolbar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  .grade-toolbar select { font:inherit; font-size:.85rem; padding:6px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+  .grade-grid { display:grid; gap:6px; font-size:.78rem; grid-template-columns:60px repeat(4,1fr); }
+  .grade-cell { background:#fff; border-radius:8px; padding:8px 10px; box-shadow:0 1px 2px rgba(0,0,0,.04); min-height:60px; border-left:3px solid var(--cor,#2563eb); display:flex; flex-direction:column; gap:2px; }
+  .grade-cell.header { background:#f3f4f6; border-left:0; font-weight:700; font-size:.75rem; text-transform:uppercase; letter-spacing:.05em; color:#4b5563; min-height:auto; align-items:center; justify-content:center; text-align:center; }
+  .grade-cell.hora { background:#f9fafb; border-left:0; align-items:center; justify-content:center; font-weight:700; color:#4b5563; }
+  .grade-cell.empty { background:#fafbfc; border-left:0; color:#d1d5db; text-align:center; align-items:center; justify-content:center; }
+  .grade-cell.em { background:#ecfdf5; border-left-color:#10b981; }
+  .grade-cell.saiu { opacity:.55; }
+  .grade-cell.planning { background:#f9fafb; border-left-color:#9ca3af; opacity:.7; }
+  .grade-disc { font-weight:700; font-size:.8rem; }
+  .grade-prof { font-size:.72rem; color:#6b7280; }
+  .grade-status { font-size:.65rem; text-transform:uppercase; font-weight:700; letter-spacing:.03em; margin-top:auto; }
+  .config-section { background:#fff; border-radius:12px; padding:18px 20px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .config-section h2 { margin:0 0 12px; font-size:.95rem; color:#1a2138; display:flex; align-items:center; gap:6px; }
+  .config-section .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .config-section label { font-size:.85rem; color:#374151; display:flex; align-items:center; gap:8px; cursor:pointer; }
+  .config-section input[type="number"], .config-section input[type="checkbox"], .config-section input[type="time"] { accent-color:#2563eb; }
+  .config-section input[type="number"], .config-section input[type="time"] { width:120px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font:inherit; font-size:.85rem; }
+  .config-section input[type="file"] { font-size:.85rem; padding:6px; border:1px dashed #2563eb; border-radius:6px; width:100%; background: #fff; }
+  .shift-info { background:#eff6ff; border:1px solid #bfdbfe; padding:10px 14px; border-radius:10px; font-size:.85rem; color:#1e40af; margin-bottom:14px; }
+  .shift-info.interval { background:#fffbeb; border-color:#fde68a; color:#92400e; }
+  .btn { border:0; border-radius:8px; padding:8px 14px; font-weight:600; font-size:.85rem; cursor:pointer; transition:background .15s,transform .05s; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+  .btn:active { transform:scale(.98); }
+  .btn.primary { background:#2563eb; color:#fff; }
+  .btn.primary:hover { background:#1d4ed8; }
+  .btn.secondary { background:#fff; color:#1a2138; border:1px solid #e5e7eb; }
+  .btn.danger { background:#ef4444; color:#fff; }
+  .btn.warning { background:#f59e0b; color:#fff; }
+  .btn.success { background:#10b981; color:#fff; }
+  .toasts { position:fixed; top:100px; right:20px; z-index:200; display:flex; flex-direction:column; gap:10px; max-width:340px; }
+  .toast { background:#1e3a8a; color:#fff; padding:12px 16px; border-radius:10px; box-shadow:0 10px 20px rgba(0,0,0,.2); border-left:4px solid #fbbf24; animation:slideIn .3s ease; font-size:.85rem; }
+  .toast strong { display:block; font-size:.9rem; margin-bottom:2px; }
+  .toast small { opacity:.85; font-size:.78rem; }
+  .toast.ok { background:#065f46; border-left-color:#10b981; }
+  .toast.err { background:#7f1d1d; border-left-color:#ef4444; }
+  @keyframes slideIn { from{transform:translateX(120%);opacity:0;} to{transform:translateX(0);opacity:1;} }
+  .news-ticker { position: fixed; bottom: 0; left: 0; width: 100%; height: 42px; background: #111827; color: #fff; display: flex; align-items: center; z-index: 100; box-shadow: 0 -2px 10px rgba(0,0,0,0.2); border-top: 2px solid #f59e0b; }
+  .news-ticker-label { background: #f59e0b; color: #111827; height: 100%; display: flex; align-items: center; padding: 0 16px; font-weight: 800; font-size: 0.85rem; white-space: nowrap; z-index: 2; text-transform: uppercase; letter-spacing: 0.05em; }
+  .news-ticker-content { flex: 1; overflow: hidden; display: flex; align-items: center; height: 100%; position: relative; }
+  .news-ticker-text { display: inline-block; white-space: nowrap; font-size: 0.85rem; font-weight: 500; animation: ticker 300s linear infinite; padding-left: 20px; }
+  .news-ticker-text:hover { animation-play-state: paused; }
+  .news-ticker-text b { color: #fbbf24; }
+  @keyframes ticker { 0% { transform: translateX(100vw); } 100% { transform: translateX(-100%); } }
+
+  .voice-dashboard { max-width: 900px; margin: 0 auto; }
+  .search-box { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 20px; text-align: center; }
+  .search-box input { width: 100%; max-width: 400px; font-size: 1.1rem; padding: 12px 16px; border: 2px solid #2563eb; border-radius: 10px; outline: none; text-align: center; }
+  .voice-hero { background: linear-gradient(135deg,#1e3a8a,#7c3aed); color:#fff; border-radius:16px; padding:22px 20px; margin-bottom:18px; text-align:center; box-shadow:0 8px 24px rgba(30,58,138,0.3); }
+  .voice-hero h2 { margin:0 0 4px; font-size:1.35rem; }
+  .voice-hero .big-count { font-size:3rem; font-weight:800; line-height:1; margin:8px 0; }
+  .voice-hero .sub { font-size:.9rem; opacity:0.9; }
+  .voice-hero .hero-actions { margin-top:14px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .voice-hero .hero-actions .btn { background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.35); }
+  .voice-status-card { background:#fff; border-radius:14px; padding:18px 20px; box-shadow:0 1px 3px rgba(0,0,0,.06); margin-bottom:14px; }
+  .voice-status-card h3 { margin:0 0 14px; color:#1e3a8a; font-size:1rem; display:flex; align-items:center; gap:8px; }
+  .voice-now { display:flex; align-items:center; gap:14px; padding:14px; border-radius:12px; background:#ecfdf5; border-left:4px solid #10b981; margin-bottom:10px; }
+  .voice-now:last-child { margin-bottom:0; }
+  .voice-now.next { background:#fffbeb; border-left-color:#f59e0b; }
+  .voice-now.none { background:#f9fafb; border-left-color:#cbd5e1; color:#6b7280; }
+  .voice-now .icon { font-size:1.8rem; flex-shrink:0; }
+  .voice-now .info { flex:1; min-width:0; }
+  .voice-now .info .title { font-weight:700; font-size:.95rem; }
+  .voice-now .info .sub { font-size:.8rem; color:#6b7280; margin-top:2px; }
+  .voice-toggle-row { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid #f3f4f6; }
+  .voice-toggle-row:last-child { border-bottom:0; }
+  .voice-toggle-row label { flex:1; cursor:pointer; font-size:.9rem; }
+  .voice-toggle-row .desc { font-size:.75rem; color:#9ca3af; display:block; margin-top:1px; }
+  .switch { position:relative; display:inline-block; width:46px; height:26px; flex-shrink:0; }
+  .switch input { opacity:0; width:0; height:0; }
+  .slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#cbd5e1; transition:.3s; border-radius:26px; }
+  .slider:before { position:absolute; content:""; height:20px; width:20px; left:3px; bottom:3px; background-color:white; transition:.3s; border-radius:50%; }
+  .switch input:checked + .slider { background-color:#10b981; }
+  .switch input:checked + .slider:before { transform:translateX(20px); }
+  .voice-presets { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:8px; margin-top:12px; }
+  .voice-selection { display:flex; flex-direction:column; gap:12px; }
+  .voice-selection select { width:100%; font:inherit; font-size:.9rem; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+  .voice-sliders { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .voice-sliders label { font-size:.8rem; color:#6b7280; display:flex; flex-direction:column; gap:4px; }
+  .voice-sliders input[type="range"] { width:100%; accent-color:#2563eb; }
+  .voice-sliders .val { font-size:.75rem; color:#1a2138; font-weight:700; }
+  .voice-active-badge { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; font-size:.75rem; font-weight:700; }
+  .voice-active-badge.on { background:#dcfce7; color:#166534; }
+  .voice-active-badge.off { background:#f3f4f6; color:#6b7280; }
+
+  .shift-chips { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
+  .shift-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 14px; border-radius:999px; font-size:.85rem; font-weight:700; background:rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.35); }
+  .shift-chip.mat { background:rgba(251,191,36,.28); border-color:rgba(251,191,36,.6); }
+  .shift-chip.vesp { background:rgba(244,114,182,.28); border-color:rgba(244,114,182,.6); }
+  .shift-chip .num { font-size:1.15rem; font-weight:800; }
+  .agenda-shift-header { padding:8px 20px; background:#f1f5f9; font-size:.72rem; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:.06em; display:flex; align-items:center; gap:8px; border-top:1px solid #e2e8f0; }
+  .agenda-shift-header:first-of-type { border-top:0; }
+  .agenda-shift-header .count-badge { background:#cbd5e1; color:#1e293b; padding:2px 9px; border-radius:999px; font-size:.7rem; font-weight:700; margin-left:auto; }
+
+  .semana-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:16px; padding:12px 16px; background:#fff; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.06); flex-wrap:wrap; }
+  .semana-toolbar label { font-size:.85rem; font-weight:600; color:#6b7280; }
+  .semana-toolbar select { font:inherit; font-size:.9rem; padding:7px 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+  .week-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+  .week-summary-item { background:#fff; border-radius:12px; padding:16px; text-align:center; box-shadow:0 1px 3px rgba(0,0,0,.06); border-top:3px solid #2563eb; }
+  .week-summary-item.mat { border-top-color:#f59e0b; }
+  .week-summary-item.vesp { border-top-color:#ec4899; }
+  .week-summary-item .num { display:block; font-size:2rem; font-weight:800; color:#1e293b; line-height:1; }
+  .week-summary-item .lbl { display:block; font-size:.8rem; color:#6b7280; margin-top:6px; font-weight:600; }
+  .week-section { margin-bottom:24px; }
+  .week-shift-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; padding:12px 16px; background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.05); border-left:4px solid #2563eb; }
+  .week-shift-header h2 { margin:0; font-size:1.05rem; font-weight:800; }
+  .week-shift-header.mat h2 { color:#92400e; } .week-shift-header.mat { border-left-color:#f59e0b; }
+  .week-shift-header.vesp h2 { color:#831843; } .week-shift-header.vesp { border-left-color:#ec4899; }
+  .week-shift-meta { font-size:.8rem; color:#6b7280; font-weight:600; }
+  .week-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; }
+  .week-day { background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.05); display:flex; flex-direction:column; min-height:100px; }
+  .week-day.today { box-shadow:0 0 0 2px #2563eb, 0 2px 8px rgba(37,99,235,.25); }
+  .week-day-header { padding:10px 12px; background:#f1f5f9; font-size:.8rem; font-weight:800; color:#334155; text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:6px; }
+  .week-day.today .week-day-header { background:#dbeafe; color:#1e40af; }
+  .today-badge { font-size:.6rem; background:#2563eb; color:#fff; padding:2px 6px; border-radius:999px; font-weight:800; }
+  .week-day-count { margin-left:auto; background:#cbd5e1; color:#1e293b; padding:1px 8px; border-radius:999px; font-size:.7rem; font-weight:700; }
+  .week-day.today .week-day-count { background:#93c5fd; }
+  .week-day-body { padding:8px; display:flex; flex-direction:column; gap:6px; flex:1; }
+  .week-empty { color:#cbd5e1; text-align:center; font-size:.78rem; font-style:italic; padding:16px 4px; }
+  .week-class { background:#fafbfc; border-left:3px solid #2563eb; border-radius:6px; padding:6px 8px; font-size:.72rem; }
+  .week-class-time { font-weight:700; font-size:.72rem; color:#334155; font-variant-numeric:tabular-nums; }
+  .week-class-disc { font-weight:700; font-size:.8rem; color:#0f172a; margin-top:2px; }
+  .week-class-prof { font-size:.72rem; color:#64748b; }
+  .week-class-turma { font-size:.68rem; color:#94a3b8; margin-top:1px; }
+
+  .minhas-aulas-container { max-width: 800px; margin: 0 auto; }
+  .agenda-card { background: #fff; border-radius: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 20px; overflow: hidden; }
+  .agenda-header { background: #f8fafc; padding: 14px 20px; font-weight: 700; font-size: 1.05rem; color: #1e3a8a; border-bottom: 2px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap; gap:8px; }
+  .agenda-header .tag-turno { font-size: 0.72rem; background: #e0e7ff; color: #3730a3; padding: 4px 10px; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .agenda-item { display: flex; align-items: center; padding: 12px 20px; border-bottom: 1px solid #f1f5f9; gap: 16px; }
+  .agenda-item:last-child { border-bottom: 0; }
+  .agenda-time { font-weight: 700; font-size: 1rem; color: #334155; min-width: 110px; font-variant-numeric: tabular-nums; }
+  .agenda-time span { display: block; font-size: 0.7rem; color: #94a3b8; font-weight: 500; }
+  .agenda-info { flex: 1; }
+  .agenda-info .disc { font-weight: 700; font-size: 1rem; color: #0f172a; margin-bottom: 2px; }
+  .agenda-info .turma { font-size: 0.85rem; color: #64748b; }
+  .agenda-info .turma strong { color: #334155; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
+
+  .agenda-accordion { border-radius:12px; margin-bottom:10px; overflow:hidden; transition:all 0.2s; }
+  .agenda-accordion:last-child { margin-bottom:0; }
+  .agenda-accordion.current { background:#ecfdf5; border-left:4px solid #10b981; }
+  .agenda-accordion.next { background:#fffbeb; border-left:4px solid #f59e0b; }
+  .agenda-accordion.none { background:#f9fafb; border-left:4px solid #cbd5e1; color:#6b7280; }
+  .agenda-header-toggle { display:flex; align-items:center; gap:14px; padding:14px; cursor:pointer; user-select:none; }
+  .agenda-header-toggle:hover { background:rgba(0,0,0,0.02); }
+  .toggle-arrow { margin-left:auto; font-size:0.8rem; color:#94a3b8; transition:transform 0.3s ease; }
+  .agenda-body { padding:0 14px 14px 14px; border-top:1px dashed rgba(0,0,0,0.1); margin-top:4px; padding-top:10px; }
+  .diario-hint { font-size:.75rem; color:#475569; margin-bottom:10px; padding:8px 10px; background:#fef3c7; border-radius:6px; border-left:3px solid #f59e0b; line-height:1.5; }
+  .diario-hint b { color:#92400e; }
+  .diario-label { font-size:.72rem; font-weight:800; color:#475569; text-transform:uppercase; letter-spacing:.04em; margin-top:10px; margin-bottom:4px; }
+  .diario-textarea { width:100%; min-height:60px; padding:9px 11px; border:1px solid #e5e7eb; border-radius:8px; font:inherit; font-size:.85rem; resize:vertical; background:#fff; }
+  .diario-textarea:focus { outline:none; border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+  .diario-save-status { font-size:.7rem; color:#10b981; font-weight:700; }
+
+  /* ===== SINCRONIZAÇÃO ===== */
+  .sync-shareit { background: linear-gradient(135deg,#1e3a8a,#2563eb); color: #fff; border-radius: 20px; padding: 30px 20px; text-align: center; margin-bottom: 20px; position: relative; overflow: hidden; box-shadow: 0 10px 25px rgba(37,99,235,.3); }
+  .sync-radar { width: 130px; height: 130px; border-radius: 50%; background: rgba(255,255,255,0.1); margin: 0 auto 20px; position: relative; display: flex; align-items: center; justify-content: center; }
+  .sync-radar::before { content: ''; position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); animation: pulse 2s infinite; }
+  .sync-radar::after { content: ''; position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); animation: pulse 2s infinite 1s; }
+  .sync-radar-icon { font-size: 3.5rem; z-index: 2; }
+  @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.5); opacity: 0; } }
+
+  .sync-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+  .sync-btn { background: #fff; color: #1e3a8a; border-radius: 16px; padding: 20px 10px; display: flex; flex-direction: column; align-items: center; gap: 10px; cursor: pointer; border: none; box-shadow: 0 4px 6px rgba(0,0,0,.05); transition: transform 0.1s; }
+  .sync-btn:active { transform: scale(0.95); }
+  .sync-btn .icon { font-size: 2.5rem; }
+  .sync-btn .title { font-weight: 800; font-size: 0.95rem; }
+  .sync-btn.send { color: #10b981; }
+  .sync-btn.receive { color: #f59e0b; }
+
+  .sync-qr-area { background: #fff; border-radius: 16px; padding: 20px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,.08); display: none; }
+  .sync-qr-area #qrcode, .sync-qr-area #qrcode-chunked { display: flex; justify-content: center; margin-bottom: 15px; min-height: 260px; align-items: center; }
+  .sync-qr-area img, .sync-qr-area canvas { border-radius: 8px; }
+
+  .sync-mode-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+  .sync-mode-btn { background: #f1f5f9; border: 2px solid #e2e8f0; border-radius: 12px; padding: 14px 8px; cursor: pointer; text-align: center; transition: all .15s; }
+  .sync-mode-btn:hover { border-color: #cbd5e1; }
+  .sync-mode-btn.active { background: #ecfdf5; border-color: #10b981; }
+  .sync-mode-btn .icon { font-size: 1.8rem; display: block; margin-bottom: 4px; }
+  .sync-mode-btn .title { font-weight: 800; font-size: .85rem; color: #1e293b; }
+  .sync-mode-btn .desc { font-size: .7rem; color: #64748b; display: block; margin-top: 2px; }
+
+  .chunk-progress { margin-top: 12px; }
+  .chunk-progress-label { font-size: .8rem; font-weight: 700; color: #1e3a8a; margin-bottom: 6px; }
+  .chunk-progress-bar { height: 10px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+  .chunk-progress-fill { height: 100%; background: linear-gradient(90deg, #10b981, #2563eb); transition: width .3s ease; border-radius: 999px; }
+  .chunk-progress-msg { font-size: .75rem; color: #64748b; margin-top: 6px; }
+  .chunk-info-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 10px; flex-wrap: wrap; }
+  .chunk-counter { display: inline-block; background: #1e3a8a; color: #fff; padding: 4px 12px; border-radius: 999px; font-weight: 800; font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .chunk-speed { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: #475569; }
+  .chunk-speed input[type="range"] { width: 100px; accent-color: #2563eb; }
+
+  .sync-status { padding: 10px; border-radius: 8px; margin-top: 15px; font-weight: bold; display: none; }
+  .sync-status.waiting { background: #fef3c7; color: #92400e; display: block; }
+  .sync-status.ok { background: #dcfce7; color: #166534; display: block; }
+  .sync-status.err { background: #fee2e2; color: #991b1b; display: block; }
+
+  #reader { width: 100%; border-radius: 16px; overflow: hidden; display: none; }
+
+  /* ===== AUTH OVERLAY ===== */
+  .auth-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#1e3a8a,#2563eb);z-index:1000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto}
+  .auth-card{background:#fff;border-radius:20px;padding:28px 24px;max-width:420px;width:100%;box-shadow:0 20px 50px rgba(0,0,0,.3);animation:authPop .3s ease}
+  @keyframes authPop{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+  .auth-logo{text-align:center;font-size:3rem;margin-bottom:8px}
+  .auth-title{text-align:center;font-size:1.3rem;font-weight:800;color:#1e3a8a;margin:0 0 4px}
+  .auth-subtitle{text-align:center;font-size:.85rem;color:#64748b;margin:0 0 20px}
+  .auth-teacher-list{max-height:280px;overflow-y:auto;margin-bottom:14px;border:1px solid #e5e7eb;border-radius:10px;background:#f9fafb}
+  .auth-teacher-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .15s}
+  .auth-teacher-item:last-child{border-bottom:0}
+  .auth-teacher-item:hover{background:#eff6ff}
+  .auth-teacher-item .avatar{width:32px;height:32px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.75rem;flex-shrink:0}
+  .auth-teacher-item .info{flex:1;min-width:0}
+  .auth-teacher-item .name{font-weight:700;font-size:.9rem;color:#1a2138}
+  .auth-teacher-item .status{font-size:.7rem;color:#94a3b8}
+  .auth-teacher-item .status.registered{color:#10b981}
+  .auth-teacher-item .arrow{color:#cbd5e1;font-size:.9rem}
+  .auth-input{width:100%;padding:12px 14px;border:2px solid #e5e7eb;border-radius:10px;font-size:1rem;margin-bottom:10px;font-family:inherit;outline:none;transition:border .15s}
+  .auth-input:focus{border-color:#2563eb}
+  .auth-btn{width:100%;padding:13px;border:0;border-radius:10px;font-weight:700;font-size:.95rem;cursor:pointer;transition:background .15s;margin-bottom:8px}
+  .auth-btn.primary{background:#2563eb;color:#fff}
+  .auth-btn.primary:hover{background:#1d4ed8}
+  .auth-btn.primary:disabled{background:#cbd5e1;cursor:not-allowed}
+  .auth-btn.secondary{background:#f3f4f6;color:#374151}
+  .auth-btn.admin{background:#fef3c7;color:#92400e;border:1px solid #fde68a}
+  .auth-btn.admin:hover{background:#fde68a}
+  .auth-error{background:#fee2e2;color:#991b1b;padding:10px 14px;border-radius:8px;font-size:.85rem;margin-bottom:12px;display:none}
+  .auth-error.show{display:block}
+  .auth-back{background:none;border:0;color:#2563eb;font-size:.85rem;font-weight:600;cursor:pointer;padding:6px 0;margin-bottom:12px}
+  .auth-hint{text-align:center;font-size:.75rem;color:#94a3b8;margin-top:14px;line-height:1.5}
+  .auth-footer{text-align:center;margin-top:16px;padding-top:16px;border-top:1px solid #f1f5f9}
+
+  /* ===== ADMIN PANEL ===== */
+  .admin-panel{position:fixed;inset:0;background:#f5f7fb;z-index:900;display:flex;flex-direction:column}
+  .admin-header{background:linear-gradient(135deg,#7f1d1d,#b91c1c);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+  .admin-header h1{margin:0;font-size:1.1rem;font-weight:800}
+  .admin-header button{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:#fff;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-size:.85rem}
+  .admin-content{flex:1;overflow-y:auto;padding:20px;max-width:900px;margin:0 auto;width:100%}
+  .admin-card{background:#fff;border-radius:12px;padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .admin-card h2{margin:0 0 12px;font-size:1rem;color:#1e3a8a;display:flex;align-items:center;gap:8px}
+  .admin-teacher{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9}
+  .admin-teacher:last-child{border-bottom:0}
+  .admin-teacher .avatar{width:36px;height:36px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;flex-shrink:0}
+  .admin-teacher .info{flex:1;min-width:0}
+  .admin-teacher .info .name{font-weight:700;font-size:.9rem}
+  .admin-teacher .info .meta{font-size:.72rem;color:#94a3b8}
+  .admin-teacher .actions{display:flex;gap:6px;flex-wrap:wrap}
+  .admin-teacher .actions button{padding:6px 10px;font-size:.75rem;border-radius:6px;border:0;cursor:pointer;font-weight:600}
+  .admin-btn-reset{background:#fef3c7;color:#92400e}
+  .admin-btn-remove{background:#fee2e2;color:#991b1b}
+  .admin-empty{text-align:center;padding:30px;color:#94a3b8;font-style:italic}
+
+  @media (max-width:960px) {
+    .painel-grid { grid-template-columns:1fr; }
+    header { padding:14px 16px; }
+    nav.tabs { top:76px; padding:8px 16px; }
+    .grade-grid { grid-template-columns:45px repeat(2,1fr); font-size:.72rem; }
+    .fila-item { flex-wrap:wrap; }
+    .fila-countdown { margin-left:0; }
+    .sim-bar .hint { margin-left:0; width:100%; }
+    .week-grid { grid-template-columns:repeat(3,1fr); }
+    .week-summary { grid-template-columns:1fr 1fr; }
+    .week-summary-item.total { grid-column:1/-1; }
+  }
+  @media (max-width:640px) {
+    .week-grid { grid-template-columns:1fr; }
+    .agenda-item { flex-direction: column; align-items: flex-start; gap: 6px; }
+    .sync-actions { grid-template-columns: 1fr; }
+  }
+  @media (max-width:540px) {
+    body { padding-bottom: 90px; }
+    .clock { font-size:1.2rem; }
+    .brand h1 { font-size:1rem; }
+    .grade-grid { grid-template-columns:40px 1fr; }
+    .toasts { left:10px; right:10px; max-width:none; }
+    .news-ticker { flex-direction: column; height: auto; }
+    .news-ticker-label { width: 100%; justify-content: center; padding: 4px 0; font-size: 0.75rem; }
+    .news-ticker-content { padding: 6px 0; }
+    .voice-sliders { grid-template-columns:1fr; }
+    .sync-mode-picker { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== AUTH OVERLAY (LOGIN) ===== -->
+<div id="authOverlay" class="auth-overlay">
+  <div class="auth-card" id="authCard">
+    <div class="auth-logo">🎓</div>
+    <h1 class="auth-title" id="authTitle">Fluxo de Professores</h1>
+    <p class="auth-subtitle" id="authSubtitle">Escolha seu nome para entrar</p>
+    <div class="auth-error" id="authError"></div>
+    <div id="authBody">
+      <div style="text-align:center;padding:30px;color:#94a3b8;">Carregando professores...</div>
+    </div>
+    <div class="auth-footer">
+      <button class="auth-btn admin" id="btnAdminLogin">🛡️ Área do Administrador</button>
+    </div>
+    <p class="auth-hint">Seu diário é salvo na nuvem e sincroniza entre seus dispositivos.</p>
+  </div>
+</div>
+
+<!-- ===== ADMIN PANEL ===== -->
+<div id="adminPanel" class="admin-panel" style="display:none;">
+  <div class="admin-header">
+    <h1>🛡️ Painel do Administrador</h1>
+    <button id="btnAdminExit">← Sair do Admin</button>
+  </div>
+  <div class="admin-content" id="adminContent"></div>
+</div>
+
+<header>
+  <div class="brand">
+    <span class="brand-icon">🎓</span>
+    <div>
+      <h1>Fluxo de Professores</h1>
+      <p>Painel ao vivo • Coordenação</p>
+    </div>
+  </div>
+  <div class="header-info">
+    <div class="clock" id="clock">--:--:--</div>
+    <div class="date" id="date">--</div>
+    <div class="shift-badge" id="shiftBadge">—</div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="painel">📊 Painel</button>
+  <button class="tab" data-tab="assistente">🎤 Assistente</button>
+  <button class="tab" data-tab="minhasaulas">👨‍🏫 Minhas Aulas</button>
+  <button class="tab" data-tab="fila">📋 Fila</button>
+  <button class="tab" data-tab="historico">📜 Histórico</button>
+  <button class="tab" data-tab="grade">📅 Grade</button>
+  <button class="tab" data-tab="semana">📆 Semana</button>
+  <button class="tab" data-tab="sincronizar">🔗 Sincronizar</button>
+  <button class="tab" data-tab="voz">🔊 Voz</button>
+  <button class="tab" data-tab="config">⚙️ Config</button>
+</nav>
+
+<main>
+  <section id="tab-painel" class="tab-content active">
+    <div class="shift-info" id="shiftInfo"></div>
+    <div class="sim-bar">
+      <label>⏱️ Simular Horário:</label>
+      <input type="time" id="simTimeInput">
+      <button class="btn warning" id="btnApplySim">Aplicar</button>
+      <button class="btn secondary" id="btnClearSim" style="display:none;">Voltar ao Tempo Real</button>
+      <span class="hint">O painel recalcula tudo com base no horário escolhido.</span>
+    </div>
+    <div class="painel-toolbar">
+      <label>Filtrar por professor:</label>
+      <select id="filterProfPainel"><option value="">Todos</option></select>
+      <button class="btn secondary" id="btnToggleSoundPanel" style="margin-left:auto;">🔔 Som ON</button>
+      <button class="btn secondary" id="btnRefresh">🔄 Atualizar</button>
+    </div>
+    <div class="painel-grid">
+      <div class="painel-col col-em-sala">
+        <h2>🟢 Em Sala <span class="count" id="countEm">0</span></h2>
+        <div id="colEm"></div>
+      </div>
+      <div class="painel-col col-proximos">
+        <h2>⏭️ Próximos <span class="count" id="countProx">0</span></h2>
+        <div id="colProx"></div>
+      </div>
+      <div class="painel-col col-saidos">
+        <h2>🚪 Já Saíram <span class="count" id="countSaiu">0</span>
+          <button class="btn-clear" id="btnClearSaidos" title="Limpar lista">🗑️</button>
+        </h2>
+        <div id="colSaiu"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-assistente" class="tab-content">
+    <div class="voice-dashboard">
+      <div class="search-box" id="assistenteSelectBox">
+        <h2 style="margin-top:0; color:#1e3a8a;">🎤 Assistente do Professor</h2>
+        <p style="color:#64748b; font-size:0.9rem; margin-bottom:15px;">
+          Selecione seu nome. O assistente falará suas aulas, avisos e resumo do dia.
+        </p>
+        <input type="text" id="assistenteProfInput" list="profList" placeholder="Digite seu nome aqui...">
+        <div style="margin-top:12px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+          <button class="btn primary" id="btnAtivarAssistente">✅ Ativar Assistente</button>
+        </div>
+      </div>
+      <div id="assistenteContent" style="display:none;"></div>
+    </div>
+  </section>
+
+  <section id="tab-minhasaulas" class="tab-content">
+    <div class="minhas-aulas-container">
+      <div class="search-box">
+        <h2 style="margin-top:0; color:#1e3a8a;">Consultar Minha Agenda</h2>
+        <p style="color:#64748b; font-size:0.9rem; margin-bottom:15px;">Digite seu nome para ver suas aulas de hoje e do próximo dia letivo.</p>
+        <input type="text" id="profSearchInput" list="profList" placeholder="Digite seu nome aqui...">
+      </div>
+      <div id="profAulasResultado"></div>
+    </div>
+  </section>
+
+  <section id="tab-fila" class="tab-content">
+    <div class="painel-toolbar">
+      <label>Filtrar por professor:</label>
+      <select id="filterProfFila"><option value="">Todos</option></select>
+    </div>
+    <div id="filaList" class="fila-list"></div>
+  </section>
+
+  <section id="tab-historico" class="tab-content">
+    <div class="hist-toolbar">
+      <label style="font-size:.8rem;font-weight:600;color:#6b7280;">Data:</label>
+      <input type="date" id="histDate">
+      <select id="histFilterProf"><option value="">Todos</option></select>
+      <select id="histFilterTipo">
+        <option value="">Todos</option>
+        <option value="ini">Inícios</option>
+        <option value="fim">Fins</option>
+        <option value="alert">Alertas</option>
+      </select>
+      <button class="btn primary" id="btnExportCsv" style="margin-left:auto;">⬇️ CSV</button>
+      <button class="btn secondary" id="btnBackfill">📥 Gerar</button>
+    </div>
+    <div id="histTableWrap"></div>
+  </section>
+
+  <section id="tab-grade" class="tab-content">
+    <div class="grade-toolbar">
+      <select id="gradeTurno">
+        <option value="matutino">Matutino</option>
+        <option value="vespertino">Vespertino</option>
+      </select>
+      <select id="gradeDia">
+        <option>Segunda</option><option>Terça</option><option>Quarta</option>
+        <option>Quinta</option><option>Sexta</option>
+      </select>
+      <select id="gradeProf"><option value="">Todos</option></select>
+    </div>
+    <div class="shift-info" id="gradeShiftInfo"></div>
+    <div id="gradeGrid" class="grade-grid"></div>
+  </section>
+
+  <section id="tab-semana" class="tab-content">
+    <div class="semana-toolbar">
+      <label>Filtrar por professor:</label>
+      <select id="semanaProf"><option value="">Todos</option></select>
+      <button class="btn secondary" id="btnImprimirSemana" style="margin-left:auto;">🖨️ Imprimir</button>
+    </div>
+    <div id="semanaContent"></div>
+  </section>
+
+  <!-- ================= SINCRONIZAÇÃO ================= -->
+  <section id="tab-sincronizar" class="tab-content">
+    <div style="max-width: 520px; margin: 0 auto;">
+      <div class="sync-shareit" id="syncRadarBox">
+        <div class="sync-radar">
+          <div class="sync-radar-icon">📡</div>
+        </div>
+        <h2 style="margin:0; font-size:1.4rem;">Transferência Rápida</h2>
+        <p style="margin:5px 0 0; font-size:0.9rem; opacity:0.9;">Sem internet, sem Bluetooth. Só o QR Code.</p>
+      </div>
+
+      <div class="sync-actions" id="syncMainButtons">
+        <button class="sync-btn send" id="btnShowSend">
+          <span class="icon">📤</span>
+          <span class="title">Enviar</span>
+          <span style="font-size:0.75rem; color:#64748b;">(Coordenação)</span>
+        </button>
+        <button class="sync-btn receive" id="btnShowReceive">
+          <span class="icon">📥</span>
+          <span class="title">Receber</span>
+          <span style="font-size:0.75rem; color:#64748b;">(Professor)</span>
+        </button>
+      </div>
+
+      <!-- ÁREA DE ENVIO -->
+      <div class="sync-qr-area" id="areaSend">
+        <h3 style="margin-top:0; color:#1e3a8a;" id="sendTitle">Aponte a câmera do outro aparelho aqui</h3>
+        <p style="font-size:0.85rem; color:#64748b; margin: 4px 0 14px;" id="sendSubtitle">Este código contém as anotações do Diário de Hoje.</p>
+
+        <div class="sync-mode-picker">
+          <div class="sync-mode-btn active" data-sync-mode="small">
+            <span class="icon">📝</span>
+            <span class="title">Só o Diário</span>
+            <span class="desc">1 QR · rápido</span>
+          </div>
+          <div class="sync-mode-btn" data-sync-mode="full">
+            <span class="icon">💾</span>
+            <span class="title">Backup Completo</span>
+            <span class="desc">QR animado · partes</span>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:6px; justify-content:center; margin-bottom:12px; flex-wrap:wrap;">
+          <button class="btn secondary" id="btnFullscreenQR" style="padding:8px 12px; font-size:.8rem;">⛶ Tela cheia</button>
+          <button class="btn warning" id="btnPauseQR" style="padding:8px 12px; font-size:.8rem;">⏸️ Pausar</button>
+          <button class="btn secondary" id="btnStepMode" style="padding:8px 12px; font-size:.8rem;">👆 Passo a passo</button>
+          <button class="btn secondary" id="btnBrightMode" style="padding:8px 12px; font-size:.8rem;">☀️ Brilho máx.</button>
+        </div>
+
+        <div id="qrcode"></div>
+        <div id="qrcode-chunked" style="display:none; flex-direction:column; align-items:center;">
+          <div id="qrcode-chunked-canvas"></div>
+
+          <div id="stepControls" style="display:none; margin-top:10px; align-items:center; gap:10px;">
+            <button class="btn secondary" id="btnPrevChunk" style="padding:10px 16px; font-size:1.1rem;">◀</button>
+            <span id="stepLabel" style="font-size:1rem; font-weight:800; color:#1e3a8a; min-width:70px; text-align:center;">1/5</span>
+            <button class="btn primary" id="btnNextChunk" style="padding:10px 16px; font-size:1.1rem;">▶</button>
+          </div>
+
+          <div class="chunk-progress" style="width:100%; margin-top:10px;">
+            <div class="chunk-info-row">
+              <span class="chunk-counter" id="sendChunkCounter">0/0</span>
+              <span class="chunk-speed">
+                ⚡ <input type="range" id="sendSpeed" min="400" max="3000" step="100" value="1200">
+                <span id="sendSpeedLabel">1.2s</span>
+              </span>
+            </div>
+            <div class="chunk-progress-bar" style="margin-top:8px;">
+              <div class="chunk-progress-fill" id="sendProgressFill" style="width:0%"></div>
+            </div>
+            <div class="chunk-progress-msg" id="sendChunkMsg">Preparando...</div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px; display:flex; flex-direction:column; gap:8px;">
+          <button class="btn secondary" id="btnShareNative">📲 Compartilhar Arquivo Completo</button>
+          <button class="btn danger" id="btnCloseSend">Fechar</button>
+        </div>
+      </div>
+
+      <!-- ÁREA DE RECEBIMENTO -->
+      <div class="sync-qr-area" id="areaReceive" style="padding:0; overflow:hidden;">
+        <div style="padding: 12px; background:#2563eb; color:#fff; font-weight:bold; display:flex; justify-content:space-between; align-items:center;">
+          <span id="receiveTitle">Aponte para o QR Code</span>
+          <button id="btnCloseReceive" style="background:none; border:none; color:#fff; font-size:1.2rem; cursor:pointer;">✖</button>
+        </div>
+
+        <div style="padding: 10px 12px; background:#f8fafc; border-bottom:1px solid #e2e8f0;">
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="receiveCameraSelect" style="flex:1; padding:8px; border:1px solid #e5e7eb; border-radius:6px; font-size:.85rem; background:#fff;">
+              <option>Carregando câmeras...</option>
+            </select>
+            <button class="btn secondary" id="btnSwitchCamera" style="padding:8px 12px; font-size:.8rem;">🔄 Trocar</button>
+          </div>
+          <div id="receiveCameraInfo" style="font-size:.72rem; color:#64748b; margin-top:4px;">📹 Aguardando câmera...</div>
+        </div>
+
+        <div id="reader"></div>
+
+        <div id="receiveProgressBox" style="padding: 14px; background:#f8fafc; display:none;">
+          <div class="chunk-info-row">
+            <span class="chunk-counter" id="receiveChunkCounter">0/0</span>
+            <span style="font-size:.75rem; color:#64748b;" id="receiveSessionId">—</span>
+          </div>
+          <div class="chunk-progress-bar" style="margin-top:8px;">
+            <div class="chunk-progress-fill" id="receiveProgressFill" style="width:0%"></div>
+          </div>
+          <div class="chunk-progress-msg" id="receiveChunkMsg">Aguardando primeiro QR Code...</div>
+          <div id="receiveFlash" style="height:5px; background:#10b981; border-radius:999px; margin-top:8px; opacity:0; transition:opacity .2s;"></div>
+          <div id="receiveLastScan" style="font-size:.65rem; color:#94a3b8; font-family:monospace; margin-top:6px; word-break:break-all; max-height:40px; overflow:hidden;"></div>
+        </div>
+
+        <div style="padding: 10px 14px; background:#fffbeb; border-top:1px solid #fde68a;">
+          <div style="font-size:.72rem; color:#92400e; line-height:1.5;">
+            <b>💡 Se não estiver lendo:</b><br>
+            1. Aumente o brilho da tela do outro celular<br>
+            2. Aproxime/afaste lentamente até achar o foco<br>
+            3. Use "⏸️ Pausar" no emissor para travar um QR<br>
+            4. Troque de câmera no seletor acima
+          </div>
+        </div>
+      </div>
+
+      <div id="syncStatusMsg" class="sync-status"></div>
+      <div style="text-align:center; margin-top:20px; font-size:0.8rem; color:#94a3b8; line-height:1.6;">
+        <p><b>💡 Como funciona:</b><br>No modo <b>Backup Completo</b>, a tela do coordenador exibe vários QR Codes em sequência. Basta apontar a câmera e esperar a barra encher.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-voz" class="tab-content">
+    <div class="voice-dashboard">
+      <div class="voice-status-card">
+        <h3>🔊 Controle Geral</h3>
+        <div class="voice-toggle-row">
+          <label>Anúncios por voz <span class="desc">Desativa/ativa TODOS os anúncios</span></label>
+          <label class="switch"><input type="checkbox" id="vozMaster" checked><span class="slider"></span></label>
+        </div>
+        <div id="vozStatusLabel" style="margin-top:10px; text-align:center;"></div>
+        <div class="voice-presets" style="margin-top:16px;">
+          <button class="btn success" data-preset="full">🎤 Modo Completo</button>
+          <button class="btn warning" data-preset="avisos">⚠️ Apenas Avisos</button>
+          <button class="btn secondary" data-preset="resumo">📅 Só Resumo</button>
+          <button class="btn danger" data-preset="silence">🔕 Silenciar Tudo</button>
+        </div>
+      </div>
+
+      <div class="voice-status-card">
+        <h3>📢 Tipos de Anúncio</h3>
+        <div class="voice-toggle-row">
+          <label>Resumo ao abrir<span class="desc">Fala quantas aulas (dividido por turno)</span></label>
+          <label class="switch"><input type="checkbox" id="vozResumo" checked><span class="slider"></span></label>
+        </div>
+        <div class="voice-toggle-row">
+          <label>Aviso antes da aula<span class="desc">"Próxima aula na turma X em 10 min"</span></label>
+          <label class="switch"><input type="checkbox" id="vozPreAula" checked><span class="slider"></span></label>
+        </div>
+        <div class="voice-toggle-row">
+          <label>Início da aula<span class="desc">"Sua aula começou agora"</span></label>
+          <label class="switch"><input type="checkbox" id="vozInicioAula" checked><span class="slider"></span></label>
+        </div>
+        <div class="voice-toggle-row">
+          <label>Aviso de encerramento<span class="desc">"Sua aula encerra em 10 min"</span></label>
+          <label class="switch"><input type="checkbox" id="vozFimAula" checked><span class="slider"></span></label>
+        </div>
+        <div class="voice-toggle-row">
+          <label>Aula encerrada<span class="desc">"Sua aula foi encerrada"</span></label>
+          <label class="switch"><input type="checkbox" id="vozFim" checked><span class="slider"></span></label>
+        </div>
+        <div class="voice-toggle-row">
+          <label>Transição entre salas<span class="desc">"Vá da turma X para Y"</span></label>
+          <label class="switch"><input type="checkbox" id="vozTransicao" checked><span class="slider"></span></label>
+        </div>
+        <div style="margin-top:16px; padding-top:16px; border-top:1px solid #f3f4f6;">
+          <label style="font-size:.85rem; color:#374151; display:flex; align-items:center; gap:8px;">
+            ⏱️ Minutos de antecedência:
+            <input type="number" id="vozLeadMin" value="10" min="1" max="30" style="width:80px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:6px; font:inherit;">
+          </label>
+        </div>
+      </div>
+
+      <div class="voice-status-card">
+        <h3>🎙️ Voz e Áudio</h3>
+        <div class="voice-selection">
+          <label style="font-size:.85rem; color:#374151;">
+            Voz: <select id="vozSelect"><option value="">Padrão do sistema</option></select>
+          </label>
+          <div class="voice-sliders">
+            <label>Velocidade <span class="val" id="vozRateVal">1.0</span><input type="range" id="vozRate" min="0.5" max="2" step="0.1" value="1"></label>
+            <label>Tom <span class="val" id="vozPitchVal">1.0</span><input type="range" id="vozPitch" min="0.5" max="2" step="0.1" value="1"></label>
+            <label style="grid-column:1/-1;">Volume <span class="val" id="vozVolumeVal">100%</span><input type="range" id="vozVolume" min="0" max="1" step="0.1" value="1"></label>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:14px;">
+          <button class="btn primary" id="btnTestVoz">🔊 Testar Voz</button>
+          <button class="btn warning" id="btnPararVoz">⏹️ Parar Voz</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-config" class="tab-content">
+    <div class="config-section" style="border: 2px dashed #10b981; background: #ecfdf5;">
+      <h2>📂 Importar Grade do Excel</h2>
+      <div class="row" style="flex-direction: column; align-items: stretch; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #d1fae5;">
+        <label style="font-weight: 700; color: #065f46;">☀️ Planilha Matutino</label>
+        <input type="file" id="excelFileMat" accept=".xlsx, .xls">
+        <button class="btn primary" id="btnUploadMat" style="margin-top: 8px; background: #10b981;">Processar Matutino</button>
+        <div id="statusMat" style="font-size:.75rem; color:#065f46; margin-top: 5px; font-weight: 600;">Status: Aguardando arquivo.</div>
+      </div>
+      <div class="row" style="flex-direction: column; align-items: stretch; margin-bottom: 0;">
+        <label style="font-weight: 700; color: #1e40af;">🌙 Planilha Vespertino</label>
+        <input type="file" id="excelFileVesp" accept=".xlsx, .xls">
+        <button class="btn primary" id="btnUploadVesp" style="margin-top: 8px; background: #2563eb;">Processar Vespertino</button>
+        <div id="statusVesp" style="font-size:.75rem; color:#1e40af; margin-top: 5px; font-weight: 600;">Status: Aguardando arquivo.</div>
+      </div>
+    </div>
+
+    <div class="config-section" style="border: 2px dashed #f59e0b; background: #fffbeb;">
+      <h2>📱 Criar Atalho no Celular</h2>
+      <div class="row" style="margin-bottom:0;">
+        <button class="btn warning" id="btnInstall" style="display:none; width:100%; font-size:1rem; padding:12px;">📲 Instalar Aplicativo</button>
+        <div id="installHint" style="font-size:.85rem; color:#92400e; width:100%; line-height:1.6;">
+          <b>🤖 Android:</b> 3 pontinhos → <b>"Adicionar à tela inicial"</b>.<br><br>
+          <b>🍏 iPhone:</b> Compartilhar → <b>"Adicionar à Tela de Início"</b>.
+        </div>
+      </div>
+    </div>
+
+    <div class="config-section">
+      <h2>⏱️ Configuração de Horários</h2>
+      <div class="row">
+        <label>Matutino Início: <input type="time" id="cfgMatStart"></label>
+        <label>Matutino Fim: <input type="time" id="cfgMatEnd"></label>
+      </div>
+      <div class="row">
+        <label>Intervalo Mat. Início: <input type="time" id="cfgMatIntStart"></label>
+        <label>Intervalo Mat. Fim: <input type="time" id="cfgMatIntEnd"></label>
+      </div>
+      <div class="row" style="margin-top: 15px; border-top: 1px solid #e5e7eb; padding-top: 15px;">
+        <label>Vespertino Início: <input type="time" id="cfgVespStart"></label>
+        <label>Vespertino Fim: <input type="time" id="cfgVespEnd"></label>
+      </div>
+      <div class="row">
+        <label>Intervalo Vesp. Início: <input type="time" id="cfgVespIntStart"></label>
+        <label>Intervalo Vesp. Fim: <input type="time" id="cfgVespIntEnd"></label>
+      </div>
+      <button class="btn primary" id="btnSaveTimes" style="margin-top:10px;">Salvar Horários</button>
+    </div>
+
+    <div class="config-section">
+      <h2>🔔 Alertas sonoros</h2>
+      <div class="row">
+        <label><input type="checkbox" id="cfgAlerts" checked> Ativar bipes</label>
+        <label>Avisar <input type="number" id="cfgLead" value="10" min="1" max="30"> min antes</label>
+        <button class="btn secondary" id="btnTestSound">🔊 Testar</button>
+      </div>
+    </div>
+    <div class="config-section">
+      <h2>👨‍🏫 Regras do Prof. Diogo</h2>
+      <div class="row"><label><input type="checkbox" id="cfgDiogoMat"> Ocultar Desp. Matutino</label></div>
+      <div class="row"><label><input type="checkbox" id="cfgDiogoVesp"> Ocultar Desp. após 3ª aula (Vesp.)</label></div>
+    </div>
+    <div class="config-section">
+      <h2>🖥️ Modo quiosque</h2>
+      <div class="row"><button class="btn primary" id="btnFullscreen">Entrar em tela cheia</button></div>
+    </div>
+    <div class="config-section">
+      <h2>💾 Dados</h2>
+      <div class="row">
+        <button class="btn secondary" id="btnExportJson">⬇️ Exportar JSON</button>
+        <button class="btn secondary" id="btnImportJson">⬆️ Importar JSON</button>
+        <input type="file" id="importFile" accept=".json" style="display:none">
+        <button class="btn danger" id="btnResetAll">🗑️ Resetar Tudo</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="news-ticker" id="newsTicker">
+  <div class="news-ticker-label">📢 Notícias</div>
+  <div class="news-ticker-content">
+    <div class="news-ticker-text" id="newsTickerText">Carregando informações...</div>
+  </div>
+</div>
+
+<datalist id="profList"></datalist>
+<div id="toasts" class="toasts"></div>
+
+<script>
+// ==================== 0. FIREBASE + AUTH + ADMIN ====================
+let currentUser = null;
+let authReady = false;
+let teacherList = [];
+let adminUnsub = null;
+
+const SESSION_KEY = 'fluxo.session.v2';
+const SALT_PREFIX = 'fluxo.salt.v2';
+
+function waitForFirebase() {
+  return new Promise(resolve => {
+    if (window.fb) return resolve();
+    window.addEventListener('fb-ready', resolve, { once: true });
+    setTimeout(() => { if (window.fb) resolve(); }, 3000);
+  });
+}
+
+async function hashPwd(password, salt) {
+  const enc = new TextEncoder().encode(`${SALT_PREFIX}|${salt}|${password}`);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function makeSalt() {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return [...arr].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function saveSession(data) { localStorage.setItem(SESSION_KEY, JSON.stringify(data)); }
+function loadSession() { try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch(e) { return null; } }
+function clearSession() { localStorage.removeItem(SESSION_KEY); }
+
+function profSlug(nome) {
+  return nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+async function doLoginTeacher(nome, password) {
+  const slug = profSlug(nome);
+  const tRef = window.fb.doc(window.fb.db, 'teachers', slug);
+  const snap = await window.fb.getDoc(tRef);
+  if (!snap.exists()) throw new Error('Professor não encontrado');
+  const data = snap.data();
+  if (!data.passwordHash) throw new Error('Este professor ainda não cadastrou senha. Use "Cadastrar".');
+  const hash = await hashPwd(password, data.salt);
+  if (hash !== data.passwordHash) throw new Error('Senha incorreta');
+  await window.fb.updateDoc(tRef, { lastLogin: window.fb.serverTimestamp() });
+  const session = { slug, nome: data.nome, isAdmin: false, exp: Date.now() + 30*86400000 };
+  saveSession(session);
+  return session;
+}
+
+async function doRegisterTeacher(nome, password) {
+  const slug = profSlug(nome);
+  const tRef = window.fb.doc(window.fb.db, 'teachers', slug);
+  const snap = await window.fb.getDoc(tRef);
+  const salt = makeSalt();
+  const hash = await hashPwd(password, salt);
+  if (snap.exists()) {
+    const data = snap.data();
+    if (data.passwordHash) throw new Error('Este professor já tem senha. Use "Entrar".');
+    await window.fb.updateDoc(tRef, { passwordHash: hash, salt, createdAt: window.fb.serverTimestamp(), lastLogin: window.fb.serverTimestamp() });
+  } else {
+    await window.fb.setDoc(tRef, {
+      nome, passwordHash: hash, salt,
+      createdAt: window.fb.serverTimestamp(), lastLogin: window.fb.serverTimestamp()
+    });
+  }
+  const session = { slug, nome, isAdmin: false, exp: Date.now() + 30*86400000 };
+  saveSession(session);
+  return session;
+}
+
+function doLogout() {
+  clearSession(); currentUser = null;
+  if (adminUnsub) { adminUnsub(); adminUnsub = null; }
+  document.getElementById('adminPanel').style.display = 'none';
+  document.getElementById('authOverlay').style.display = 'flex';
+  showLoginScreen();
+}
+
+function doLoginAdmin(password) {
+  if (password !== '1966') throw new Error('Senha admin incorreta');
+  const session = { isAdmin: true, nome: 'Administrador', exp: Date.now() + 86400000 };
+  saveSession(session);
+  return session;
+}
+
+async function adminResetPassword(slug, newPassword) {
+  const salt = makeSalt();
+  const hash = await hashPwd(newPassword, salt);
+  await window.fb.updateDoc(window.fb.doc(window.fb.db, 'teachers', slug), {
+    passwordHash: hash, salt, passwordResetAt: window.fb.serverTimestamp()
+  });
+}
+
+async function adminCreateTeacher(nome) {
+  const slug = profSlug(nome);
+  await window.fb.setDoc(window.fb.doc(window.fb.db, 'teachers', slug), {
+    nome, createdAt: window.fb.serverTimestamp(), passwordHash: null
+  }, { merge: true });
+}
+
+async function adminRemoveTeacher(slug) {
+  await window.fb.deleteDoc(window.fb.doc(window.fb.db, 'teachers', slug));
+}
+
+async function loadTeachersFromFirestore() {
+  const snap = await window.fb.getDocs(window.fb.collection(window.fb.db, 'teachers'));
+  teacherList = snap.docs.map(d => ({ slug: d.id, ...d.data() }));
+  return teacherList;
+}
+
+async function loadAllFromFirebase() {
+  try {
+    const schSnap = await window.fb.getDoc(window.fb.doc(window.fb.db, 'config', 'schedule'));
+    if (schSnap.exists()) {
+      const data = schSnap.data();
+      if (data.matutino && data.vespertino) RAW = { matutino: data.matutino, vespertino: data.vespertino };
+    }
+    const setSnap = await window.fb.getDoc(window.fb.doc(window.fb.db, 'config', 'settings'));
+    if (setSnap.exists()) Object.assign(settings, setSnap.data());
+    
+    if (currentUser && currentUser.slug) {
+      const tSnap = await window.fb.getDoc(window.fb.doc(window.fb.db, 'teachers', currentUser.slug));
+      if (tSnap.exists()) {
+        const tData = tSnap.data();
+        if (tData.voice) Object.assign(voiceState, tData.voice);
+      }
+      voiceState.meuProf = currentUser.nome;
+      
+      const dRef = window.fb.doc(window.fb.db, 'diario', currentUser.slug + '__' + todayKey());
+      const dSnap = await window.fb.getDoc(dRef);
+      if (dSnap.exists() && dSnap.data().entries) {
+        const entries = dSnap.data().entries;
+        Object.keys(entries).forEach(k => {
+          const [turno, aula] = k.split('__');
+          const fullKey = diarioKey(currentUser.nome, todayKey(), turno, aula);
+          diario[fullKey] = Object.assign({ prof: currentUser.nome, date: todayKey(), turno, aula }, entries[k]);
+        });
+        saveJSON('fluxo.diario', diario);
+      }
+    }
+    
+    const evSnap = await window.fb.getDocs(window.fb.collection(window.fb.db, 'events'));
+    const cut = Date.now() - 30*86400000;
+    log = evSnap.docs.map(d => d.data()).filter(e => e.ts && e.ts >= cut);
+  } catch (e) {
+    console.error('loadAllFromFirebase', e);
+    if (typeof showToast === 'function') showToast('Modo offline', 'Usando dados locais.');
+  }
+}
+
+let syncDiarioTimer = null;
+function scheduleSyncDiario() {
+  if (syncDiarioTimer) clearTimeout(syncDiarioTimer);
+  syncDiarioTimer = setTimeout(async () => {
+    if (!currentUser || currentUser.isAdmin || !currentUser.slug) return;
+    try {
+      const key = currentUser.slug + '__' + todayKey();
+      const entries = {};
+      Object.keys(diario).forEach(k => {
+        const e = diario[k];
+        if (e.prof === currentUser.nome && e.date === todayKey()) {
+          entries[e.turno + '__' + e.aula] = {
+            worked: e.worked || '', next: e.next || '',
+            turma: e.turma || '', disciplina: e.disciplina || ''
+          };
+        }
+      });
+      await window.fb.setDoc(window.fb.doc(window.fb.db, 'diario', key), {
+        prof: currentUser.nome, date: todayKey(), entries,
+        updatedAt: window.fb.serverTimestamp()
+      });
+    } catch (err) { console.warn('syncDiario', err); }
+  }, 900);
+}
+
+async function syncConfigToFirebase() {
+  if (!window.fb) return;
+  try {
+    await window.fb.setDoc(window.fb.doc(window.fb.db, 'config', 'schedule'), {
+      matutino: RAW.matutino, vespertino: RAW.vespertino, updatedAt: window.fb.serverTimestamp()
+    });
+    await window.fb.setDoc(window.fb.doc(window.fb.db, 'config', 'settings'), {
+      ...settings, updatedAt: window.fb.serverTimestamp()
+    });
+  } catch (e) { console.warn('syncConfig', e); }
+}
+
+let syncVoiceTimer = null;
+function scheduleSyncVoice() {
+  if (syncVoiceTimer) clearTimeout(syncVoiceTimer);
+  syncVoiceTimer = setTimeout(async () => {
+    if (!currentUser || currentUser.isAdmin || !currentUser.slug || !window.fb) return;
+    try {
+      await window.fb.updateDoc(window.fb.doc(window.fb.db, 'teachers', currentUser.slug), { voice: voiceState });
+    } catch (e) { console.warn('syncVoice', e); }
+  }, 1200);
+}
+
+async function pushEventToFirebase(evt) {
+  if (!window.fb) return;
+  try {
+    await window.fb.addDoc(window.fb.collection(window.fb.db, 'events'), evt);
+  } catch (e) { console.warn('pushEvent', e); }
+}
+
+async function showLoginScreen() {
+  const body = document.getElementById('authBody');
+  const title = document.getElementById('authTitle');
+  const sub = document.getElementById('authSubtitle');
+  const err = document.getElementById('authError');
+  err.className = 'auth-error';
+  title.textContent = 'Fluxo de Professores';
+  sub.textContent = 'Escolha seu nome para entrar';
+  document.getElementById('authOverlay').style.display = 'flex';
+
+  body.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;">Carregando professores...</div>';
+  try {
+    await loadTeachersFromFirestore();
+  } catch (e) {
+    err.textContent = 'Erro ao conectar. Verifique a internet.';
+    err.className = 'auth-error show';
+    body.innerHTML = '<button class="auth-btn secondary" onclick="showLoginScreen()">🔄 Tentar de novo</button>';
+    return;
+  }
+
+  const registeredSlugs = new Set(teacherList.map(t => t.slug));
+  const fromSchedule = [];
+  ['matutino','vespertino'].forEach(turno => {
+    const g = RAW[turno];
+    if (!g || !g.data) return;
+    Object.values(g.data).forEach(dia => {
+      Object.values(dia).forEach(list => {
+        (list || []).forEach(cell => {
+          if (!cell) return;
+          const [disc, prof] = cell.split('|');
+          if (prof) fromSchedule.push(prof);
+        });
+      });
+    });
+  });
+  const allNames = [...new Set([...fromSchedule, ...teacherList.map(t => t.nome)])].sort((a,b)=>a.localeCompare(b));
+
+  if (allNames.length === 0) {
+    body.innerHTML = `
+      <p style="text-align:center;color:#64748b;font-size:.85rem;margin-bottom:12px;">
+        Nenhum professor cadastrado ainda.<br>Crie o primeiro agora:
+      </p>
+      <input type="text" class="auth-input" id="regNome" placeholder="Seu nome (ex: Carlos)">
+      <input type="password" class="auth-input" id="regSenha" placeholder="Crie uma senha (mín. 4 caracteres)">
+      <input type="password" class="auth-input" id="regSenha2" placeholder="Confirme a senha">
+      <button class="auth-btn primary" id="btnRegisterFirst">Criar conta</button>
+    `;
+    document.getElementById('btnRegisterFirst').onclick = async () => {
+      const nome = document.getElementById('regNome').value.trim();
+      const p1 = document.getElementById('regSenha').value;
+      const p2 = document.getElementById('regSenha2').value;
+      if (!nome || p1.length < 4) { err.textContent = 'Preencha nome e senha (mín. 4)'; err.className='auth-error show'; return; }
+      if (p1 !== p2) { err.textContent = 'Senhas não conferem'; err.className='auth-error show'; return; }
+      try {
+        const sess = await doRegisterTeacher(nome, p1);
+        currentUser = sess;
+        await loadAllFromFirebase();
+        document.getElementById('authOverlay').style.display = 'none';
+        startApp();
+      } catch (e) { err.textContent = e.message; err.className='auth-error show'; }
+    };
+    return;
+  }
+
+  let html = '<div class="auth-teacher-list">';
+  allNames.forEach(nome => {
+    const slug = profSlug(nome);
+    const reg = teacherList.find(t => t.slug === slug);
+    const hasPwd = reg && reg.passwordHash;
+    const color = (typeof profColor === 'function') ? profColor(nome) : '#2563eb';
+    html += `
+      <div class="auth-teacher-item" data-nome="${escapeHtml(nome)}" data-registered="${hasPwd ? '1' : '0'}">
+        <div class="avatar" style="background:${color}">${escapeHtml(nome.slice(0,2).toUpperCase())}</div>
+        <div class="info">
+          <div class="name">${escapeHtml(nome)}</div>
+          <div class="status ${hasPwd ? 'registered' : ''}">${hasPwd ? '✓ Senha cadastrada' : '○ Primeiro acesso — crie sua senha'}</div>
+        </div>
+        <div class="arrow">›</div>
+      </div>`;
+  });
+  html += '</div>';
+  body.innerHTML = html;
+
+  body.querySelectorAll('.auth-teacher-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const nome = el.dataset.nome;
+      const isReg = el.dataset.registered === '1';
+      showPasswordPrompt(nome, isReg);
+    });
+  });
+}
+
+function showPasswordPrompt(nome, isRegistered) {
+  const body = document.getElementById('authBody');
+  const title = document.getElementById('authTitle');
+  const sub = document.getElementById('authSubtitle');
+  const err = document.getElementById('authError');
+  err.className = 'auth-error';
+  title.textContent = isRegistered ? 'Bem-vindo de volta' : 'Primeiro acesso';
+  sub.textContent = `Professor(a) ${nome}`;
+
+  if (isRegistered) {
+    body.innerHTML = `
+      <button class="auth-back" id="btnBackLogin">← Escolher outro nome</button>
+      <input type="password" class="auth-input" id="loginSenha" placeholder="Sua senha" autofocus>
+      <button class="auth-btn primary" id="btnDoLogin">Entrar</button>
+    `;
+    document.getElementById('btnDoLogin').onclick = async () => {
+      const pwd = document.getElementById('loginSenha').value;
+      if (!pwd) { err.textContent = 'Digite a senha'; err.className='auth-error show'; return; }
+      try {
+        const sess = await doLoginTeacher(nome, pwd);
+        currentUser = sess;
+        await loadAllFromFirebase();
+        document.getElementById('authOverlay').style.display = 'none';
+        startApp();
+      } catch (e) { err.textContent = e.message; err.className='auth-error show'; }
+    };
+    document.getElementById('loginSenha').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btnDoLogin').click();
+    });
+  } else {
+    body.innerHTML = `
+      <button class="auth-back" id="btnBackLogin">← Escolher outro nome</button>
+      <p style="font-size:.85rem;color:#64748b;margin:0 0 12px;">Crie uma senha. Você usará ela sempre que abrir o app.</p>
+      <input type="password" class="auth-input" id="newSenha" placeholder="Crie uma senha (mín. 4 caracteres)" autofocus>
+      <input type="password" class="auth-input" id="newSenha2" placeholder="Confirme a senha">
+      <button class="auth-btn primary" id="btnDoRegister">Criar senha e entrar</button>
+    `;
+    document.getElementById('btnDoRegister').onclick = async () => {
+      const p1 = document.getElementById('newSenha').value;
+      const p2 = document.getElementById('newSenha2').value;
+      if (p1.length < 4) { err.textContent = 'Senha mín. 4 caracteres'; err.className='auth-error show'; return; }
+      if (p1 !== p2) { err.textContent = 'Senhas não conferem'; err.className='auth-error show'; return; }
+      try {
+        const sess = await doRegisterTeacher(nome, p1);
+        currentUser = sess;
+        await loadAllFromFirebase();
+        document.getElementById('authOverlay').style.display = 'none';
+        startApp();
+      } catch (e) { err.textContent = e.message; err.className='auth-error show'; }
+    };
+  }
+  const backBtn = document.getElementById('btnBackLogin');
+  if (backBtn) backBtn.onclick = () => showLoginScreen();
+}
+
+function showAdminLogin() {
+  const body = document.getElementById('authBody');
+  const title = document.getElementById('authTitle');
+  const sub = document.getElementById('authSubtitle');
+  const err = document.getElementById('authError');
+  err.className = 'auth-error';
+  title.textContent = '🛡️ Área Restrita';
+  sub.textContent = 'Digite a senha do administrador';
+  body.innerHTML = `
+    <button class="auth-back" id="btnBackAdmin">← Voltar ao login</button>
+    <input type="password" class="auth-input" id="adminSenha" placeholder="Senha do administrador" autofocus>
+    <button class="auth-btn primary" id="btnAdminEnter" style="background:#7f1d1d;">Entrar como Admin</button>
+  `;
+  document.getElementById('btnAdminEnter').onclick = async () => {
+    const pwd = document.getElementById('adminSenha').value;
+    try {
+      const sess = await doLoginAdmin(pwd);
+      currentUser = sess;
+      document.getElementById('authOverlay').style.display = 'none';
+      openAdminPanel();
+    } catch (e) { err.textContent = e.message; err.className='auth-error show'; }
+  };
+  document.getElementById('adminSenha').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btnAdminEnter').click();
+  });
+  document.getElementById('btnBackAdmin').onclick = () => showLoginScreen();
+}
+
+function openAdminPanel() {
+  document.getElementById('adminPanel').style.display = 'flex';
+  renderAdminPanel();
+  if (adminUnsub) adminUnsub();
+  adminUnsub = window.fb.onSnapshot(window.fb.collection(window.fb.db, 'teachers'), snap => {
+    teacherList = snap.docs.map(d => ({ slug: d.id, ...d.data() }));
+    renderAdminPanel();
+  });
+}
+
+function renderAdminPanel() {
+  const wrap = document.getElementById('adminContent');
+  if (!wrap) return;
+  let html = `
+    <div class="admin-card">
+      <h2>👥 Professores cadastrados</h2>
+      <div id="adminTeachersList">`;
+  if (teacherList.length === 0) {
+    html += '<div class="admin-empty">Nenhum professor cadastrado ainda.</div>';
+  } else {
+    teacherList.sort((a,b) => a.nome.localeCompare(b.nome)).forEach(t => {
+      const color = (typeof profColor === 'function') ? profColor(t.nome) : '#2563eb';
+      const lastLogin = t.lastLogin && t.lastLogin.toDate ? t.lastLogin.toDate().toLocaleString('pt-BR') : '—';
+      const hasPwd = t.passwordHash ? '✓ Com senha' : '⚠️ Sem senha';
+      html += `
+        <div class="admin-teacher">
+          <div class="avatar" style="background:${color}">${escapeHtml(t.nome.slice(0,2).toUpperCase())}</div>
+          <div class="info">
+            <div class="name">${escapeHtml(t.nome)}</div>
+            <div class="meta">${hasPwd} · Último login: ${lastLogin}</div>
+          </div>
+          <div class="actions">
+            <button class="admin-btn-reset" data-action="reset" data-slug="${t.slug}" data-nome="${escapeHtml(t.nome)}">🔑 Resetar senha</button>
+            <button class="admin-btn-remove" data-action="remove" data-slug="${t.slug}" data-nome="${escapeHtml(t.nome)}">🗑️ Remover</button>
+          </div>
+        </div>`;
+    });
+  }
+  html += `</div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;">
+        <input type="text" class="auth-input" id="newTeacherName" placeholder="Nome do novo professor" style="margin-bottom:8px;">
+        <button class="auth-btn primary" id="btnAddTeacher" style="background:#10b981;margin:0;">➕ Cadastrar professor</button>
+      </div>
+    </div>
+    <div class="admin-card">
+      <h2>⚙️ Sincronização</h2>
+      <p style="font-size:.85rem;color:#64748b;margin:0 0 10px;">Força o envio da grade e configurações atuais para todos os dispositivos.</p>
+      <button class="auth-btn primary" id="btnAdminSync">🔄 Enviar grade/config para a nuvem</button>
+    </div>
+  `;
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const action = btn.dataset.action;
+      const slug = btn.dataset.slug;
+      const nome = btn.dataset.nome;
+      if (action === 'reset') {
+        const nova = prompt(`Nova senha para ${nome}:\n(mín. 4 caracteres)`);
+        if (nova === null) return;
+        if (nova.length < 4) { showToast('Erro', 'Senha muito curta', 'err'); return; }
+        try {
+          await adminResetPassword(slug, nova);
+          showToast('Senha alterada', `${nome} agora pode entrar com a nova senha.`, 'ok');
+        } catch (e) { showToast('Erro', e.message, 'err'); }
+      } else if (action === 'remove') {
+        if (!confirm(`Remover ${nome}? Ele(a) perderá o acesso e a senha.`)) return;
+        try {
+          await adminRemoveTeacher(slug);
+          showToast('Removido', `${nome} foi removido.`, 'ok');
+        } catch (e) { showToast('Erro', e.message, 'err'); }
+      }
+    });
+  });
+
+  const addBtn = document.getElementById('btnAddTeacher');
+  if (addBtn) addBtn.onclick = async () => {
+    const nome = document.getElementById('newTeacherName').value.trim();
+    if (!nome) return;
+    try {
+      await adminCreateTeacher(nome);
+      document.getElementById('newTeacherName').value = '';
+      showToast('Cadastrado', `${nome} pode fazer o primeiro acesso.`, 'ok');
+    } catch (e) { showToast('Erro', e.message, 'err'); }
+  };
+
+  const syncBtn = document.getElementById('btnAdminSync');
+  if (syncBtn) syncBtn.onclick = async () => {
+    try {
+      await syncConfigToFirebase();
+      showToast('Sincronizado', 'Grade e configurações enviadas.', 'ok');
+    } catch (e) { showToast('Erro', e.message, 'err'); }
+  };
+}
+
+async function startApp() {
+  applyTimeSettings();
+  schedule = buildSchedule();
+  populateProfFilters();
+  const histDate = document.getElementById('histDate');
+  if (histDate) histDate.value = todayKey();
+  setupTabs();
+  setupUI();
+  setupPWA();
+  tickClock();
+  setInterval(tickClock, 1000);
+  setInterval(() => { renderShiftStatus(); renderPainel(); renderFila(); updateNewsTicker(); renderAssistente(); }, 5000);
+  renderAll();
+  checkEvents();
+  setInterval(checkEvents, 5000);
+
+  const headerInfo = document.querySelector('.header-info');
+  if (headerInfo && !document.getElementById('btnLogout')) {
+    const btn = document.createElement('button');
+    btn.id = 'btnLogout';
+    btn.textContent = '🚪 Sair';
+    btn.style.cssText = 'margin-top:6px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.35);color:#fff;padding:4px 10px;border-radius:6px;font-size:.75rem;cursor:pointer;font-weight:600;';
+    btn.onclick = () => { if (confirm('Sair da conta?')) doLogout(); };
+    headerInfo.appendChild(btn);
+  }
+}
+
+// ==================== 1. CONSTANTES ====================
+let SHIFTS = { matutino: { start: '07:00', end: '11:25' }, vespertino: { start: '13:00', end: '17:25' } };
+let INTERVALS = { matutino: { start: '09:30', end: '09:45' }, vespertino: { start: '15:30', end: '15:45' } };
+
+let RAW = {
+  matutino: {
+    times: { '1ª': ['07:00','07:50'], '2ª': ['07:50','08:40'], '3ª': ['08:40','09:30'], '4ª': ['09:45','10:35'], '5ª': ['10:35','11:25'], '6ª': ['11:25','12:15'] },
+    turmas: ['13.01','23.01','33.01','JA'],
+    data: {
+      'Segunda': { '1ª': ['Mat|Carlos','Fil|Pedro','Port|Andréia','Desp|Diogo'], '2ª': ['Art|Diogo','Quí|Márcia','Fís|Carlos','Mat|Jeane'], '3ª': ['Mat|Carlos','Port|Andréia','IFA I|Márcia','Mat|Jeane'], '4ª': ['Port|Andréia','Fís|Márcia','Mat|Jeane','Desp|Diogo'], '5ª': ['Fís|Márcia','Mat|Jeane','EdFís|Diogo', null], '6ª': ['IFA I|Renata','Geo|Pedro','Hist|Daniel', null] },
+      'Terça': { '1ª': ['IFA I|Renata','Art|Diogo','Port|Andréia','Mat|Jeane'], '2ª': ['Port|Andréia','Bio|Renata','Mat|Jeane','Port|Antonia'], '3ª': ['Quí|Jeane','EdFís|Diogo','Fís|Carlos','Port|Antonia'], '4ª': ['Mat|Carlos','Port|Andréia','Mat|Jeane','Desp|Diogo'], '5ª': ['EdFís|Diogo','Mat|Jeane','Bio|Renata', null], '6ª': ['IFA II|Antonia','IFA II|Andréia','IFA II|Jeane', null] },
+      'Quarta': { '1ª': ['IFA I|Renata','Mat|Jeane','Geo|Pedro','Desp|Diogo'], '2ª': ['Soc|Andréia','IFA I|Daniel','Bio|Renata','Produção|Márcia'], '3ª': ['Port|Andréia','Bio|Renata','Hist|Daniel','Desp|Diogo'], '4ª': ['Bio|Márcia','Ing|Eglisnete','Port|Andréia','Desp|Diogo'], '5ª': ['Red|Eglisnete','Port|Andréia','IFA I|Márcia','Desp|Diogo'], '6ª': ['Hist|Pedro','IFA I|Daniel','IFA II|Jeane', null] },
+      'Quinta': { '1ª': ['Port|Andréia','Geo|Pedro','Art|Diogo', null], '2ª': ['Hist|Pedro','Soc|Diogo','Port|Andréia','Port|Antonia'], '3ª': ['IFA II|Antonia','IFA II|Andréia','Fil|Pedro','Desp|Diogo'], '4ª': ['Mat|Carlos','Quí|Márcia','Red|Antonia','Desp|Diogo'], '5ª': ['Fil|Pedro','Port|Andréia','Quí|Márcia','Desp|Diogo'], '6ª': ['Geo|Daniel','IFA II|Andréia','IFA I|Márcia', null] },
+      'Sexta': { '1ª': ['Fís|Márcia','Hist|Daniel','Ing|Eglisnete', null], '2ª': ['Ing|Eglisnete','Mat|Jeane','Soc|Daniel', null], '3ª': ['Geo|Daniel','Fís|Márcia','IFA II|Jeane', null], '4ª': ['Bio|Márcia','Red|Eglisnete','Mat|Jeane', null], '5ª': ['Quí|Jeane','IFA I|Daniel','Quí|Márcia', null], '6ª': ['IFA II|Antonia','Hist|Daniel','Geo|Pedro', null] }
+    }
+  },
+  vespertino: {
+    times: { '1ª': ['13:00','13:50'], '2ª': ['13:50','14:40'], '3ª': ['14:40','15:30'], '4ª': ['15:45','16:35'], '5ª': ['16:35','17:25'], '6ª': ['17:25','18:15'] },
+    turmas: ['13.02','23.02','33.02','JA'],
+    data: {
+      'Segunda': { '1ª': ['Port|Andréia','Bio|Renata','Fil|Pedro','Desp|Diogo'], '2ª': ['Bio|Márcia','Geo|Pedro','Bio|Renata','Mat|Jeane'], '3ª': ['IFA I|Renata','Fís|Márcia','Mat|Carlos','Mat|Jeane'], '4ª': ['Fil|Pedro','Mat|Jeane','IFA I|Márcia', null], '5ª': ['Mat|Carlos','Quí|Márcia','Geo|Pedro', null], '6ª': ['IFA II|Antonia','IFA II|Andréia','Geo|Pedro', null] },
+      'Terça': { '1ª': ['Ing|Eglisnete','Fil|Pedro','Mat|Carlos','Desp|Diogo'], '2ª': ['Quí|Renata','Red|Eglisnete','Port|Andréia','Desp|Diogo'], '3ª': ['Port|Andréia','EdFís|Diogo','Ing|Eglisnete','Mat|Jeane'], '4ª': ['EdFís|Diogo','Bio|Renata','Mat|Carlos','Port|Antonia'], '5ª': ['Mat|Carlos','Port|Eglisnete','EdFís|Diogo','Port|Antonia'], '6ª': ['IFA II|Antonia','Geo|Pedro','IFA II|Jeane', null] },
+      'Quarta': { '1ª': ['Art|Diogo','Fís|Márcia','IFA II|Jeane', null], '2ª': ['Soc|Andréia','Port|Eglisnete','Quí|Márcia','Desp|Diogo'], '3ª': ['Fís|Márcia','Mat|Jeane','Port|Andréia','Desp|Diogo'], '4ª': ['Hist|Pedro','Port|Eglisnete','Fís|Jeane','Desp|Diogo'], '5ª': ['Bio|Márcia','Mat|Jeane','Port|Andréia','Desp|Diogo'], '6ª': ['Hist|Pedro','IFA I|Daniel','IFA II|Jeane', null] },
+      'Quinta': { '1ª': ['Mat|Carlos','Soc|Pedro','Art|Diogo','Produção|Márcia'], '2ª': ['Port|Andréia','Art|Diogo','Mat|Carlos','Port|Antonia'], '3ª': ['IFA II|Antonia','IFA I|Daniel','Port|Andréia','Desp|Diogo'], '4ª': ['Port|Andréia','Hist|Daniel','Red|Antonia','Desp|Diogo'], '5ª': ['Mat|Carlos','IFA II|Andréia','Hist|Daniel','Desp|Diogo'], '6ª': ['Geo|Daniel','IFA II|Andréia','Geo|Pedro', null] },
+      'Sexta': { '1ª': ['IFA I|Renata','Port|Eglisnete','Soc|Daniel', null], '2ª': ['Quí|Renata','IFA I|Daniel','IFA I|Márcia', null], '3ª': ['Fís|Márcia','Mat|Jeane','Bio|Renata', null], '4ª': ['Geo|Daniel','Ing|Eglisnete','Quí|Márcia', null], '5ª': ['Red|Eglisnete','Quí|Márcia','Fís|Jeane', null], '6ª': ['IFA I|Renata','Hist|Daniel','IFA I|Márcia', null] }
+    }
+  }
+};
+
+// ==================== 2. ESTADO ====================
+const SETTINGS_VERSION = 4;
+let log = loadJSON('fluxo.log', []);
+let clearedSaidos = loadJSON('fluxo.clearedSaidos', { date: '', profs: [] });
+let settings = Object.assign({ alerts: true, leadMinutes: 10, hideDiogoMat: false, hideDiogoVesp: false, version: SETTINGS_VERSION, matStart: '07:00', matEnd: '11:25', matIntStart: '09:30', matIntEnd: '09:45', vespStart: '13:00', vespEnd: '17:25', vespIntStart: '15:30', vespIntEnd: '15:45' }, loadJSON('fluxo.settings', {}));
+if (settings.version !== SETTINGS_VERSION) { settings.version = SETTINGS_VERSION; saveJSON('fluxo.settings', settings); }
+
+const savedRAW = loadJSON('fluxo.rawSchedule', null);
+if (savedRAW && savedRAW.matutino && savedRAW.vespertino) {
+  RAW = savedRAW;
+  setTimeout(() => {
+    const sm = document.getElementById('statusMat'); if (sm) sm.innerHTML = `Status: <span style="color:#10b981">Grade salva anteriormente.</span>`;
+    const sv = document.getElementById('statusVesp'); if (sv) sv.innerHTML = `Status: <span style="color:#10b981">Grade salva anteriormente.</span>`;
+  }, 0);
+}
+
+let schedule = [];
+let simulatedTime = null;
+const firedEvents = new Set();
+let lastMinuteKey = '';
+let lastDayKey = '';
+let audioCtx = null;
+let audioWarmed = false;
+
+let voiceState = Object.assign({ meuProf: '', enabled: true, summary: true, preClass: true, classStart: true, classEnding: true, classEnd: true, transition: true, leadMin: 10, voiceName: '', rate: 1, pitch: 1, volume: 1, lastSummary: '', firedDate: '', fired: [] }, loadJSON('fluxo.voice', {}));
+if (!Array.isArray(voiceState.fired)) voiceState.fired = [];
+function saveVoiceState() { saveJSON('fluxo.voice', voiceState); if (typeof scheduleSyncVoice === 'function') scheduleSyncVoice(); }
+function hasFired(k) { return voiceState.fired.includes(k); }
+function markFired(k) { if (!voiceState.fired.includes(k)) voiceState.fired.push(k); }
+
+let speechQueue = [];
+let speakingNow = false;
+let speechWarmed = false;
+
+let diario = loadJSON('fluxo.diario', {});
+let diarioExpanded = {};
+function diarioKey(prof, date, turno, aula) { return `${prof}|${date}|${turno}|${aula}`; }
+function saveDiario() { saveJSON('fluxo.diario', diario); if (typeof scheduleSyncDiario === 'function') scheduleSyncDiario(); }
+
+let html5QrCode = null;
+
+// ==================== 3. HELPERS ====================
+function loadJSON(k, d) { try { const r = localStorage.getItem(k); if (r) return JSON.parse(r); } catch(e){} return d; }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+function saveState() { saveJSON('fluxo.log', log); saveJSON('fluxo.settings', settings); saveJSON('fluxo.rawSchedule', RAW); if (typeof syncConfigToFirebase === 'function') syncConfigToFirebase(); }
+function timeToMin(t) { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+m; }
+function timeToSpeech(t) { const [h,m] = t.split(':').map(Number); if (m === 0) return `às ${h} horas`; return `às ${h} e ${String(m).padStart(2,'0')}`; }
+function getDiaSemana(d) { return ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][d.getDay()]; }
+function todayKey() { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function scheduleKey(c) { return c.turno+'|'+c.dia+'|'+c.aula+'|'+c.turma; }
+function nowMin() { if (simulatedTime) return timeToMin(simulatedTime); const d = new Date(); return d.getHours()*60 + d.getMinutes(); }
+function applyTimeSettings() {
+  SHIFTS.matutino.start = settings.matStart; SHIFTS.matutino.end = settings.matEnd;
+  SHIFTS.vespertino.start = settings.vespStart; SHIFTS.vespertino.end = settings.vespEnd;
+  INTERVALS.matutino.start = settings.matIntStart; INTERVALS.matutino.end = settings.matIntEnd;
+  INTERVALS.vespertino.start = settings.vespIntStart; INTERVALS.vespertino.end = settings.vespIntEnd;
+}
+function currentShift() { const n = nowMin(); for (const [name, s] of Object.entries(SHIFTS)) { if (n >= timeToMin(s.start) && n < timeToMin(s.end)) return name; } return null; }
+function currentInterval() { const n = nowMin(); for (const [name, iv] of Object.entries(INTERVALS)) { if (n >= timeToMin(iv.start) && n < timeToMin(iv.end)) return { turno: name, start: iv.start, end: iv.end }; } return null; }
+
+function buildSchedule() {
+  const out = [];
+  ['matutino','vespertino'].forEach(turno => {
+    const g = RAW[turno]; if (!g || !g.data) return;
+    Object.keys(g.data).forEach(dia => {
+      Object.keys(g.data[dia]).forEach(aula => {
+        const classList = g.data[dia][aula]; if (!classList) return;
+        classList.forEach((cell, i) => {
+          if (!cell) return;
+          const [disciplina, professor] = cell.split('|');
+          if (settings.hideDiogoMat && professor === 'Diogo' && disciplina === 'Desp' && turno === 'matutino') return;
+          if (settings.hideDiogoVesp && professor === 'Diogo' && disciplina === 'Desp' && turno === 'vespertino' && (aula === '4ª' || aula === '5ª' || aula === '6ª')) return;
+          out.push({ turno, dia, aula, turma: g.turmas[i] || '?', disciplina, professor, inicio: g.times[aula] ? g.times[aula][0] : '00:00', fim: g.times[aula] ? g.times[aula][1] : '00:00', isPlanning: aula === '6ª' });
+        });
+      });
+    });
+  });
+  return out;
+}
+
+function getStatus(c) {
+  const hoje = getDiaSemana(new Date());
+  if (c.dia !== hoje) return 'outro';
+  if (c.isPlanning) return 'planning';
+  const n = nowMin(), s = timeToMin(c.inicio), e = timeToMin(c.fim);
+  if (n < s) return 'agendado';
+  if (n < e) return 'em_sala';
+  return 'saiu';
+}
+
+function groupTeachers() {
+  const hoje = getDiaSemana(new Date());
+  const byProf = {};
+  schedule.filter(c => c.dia === hoje && !c.isPlanning).forEach(c => { (byProf[c.professor] = byProf[c.professor] || []).push(c); });
+  const emSala = [], proximos = [], saidos = [];
+  Object.keys(byProf).forEach(prof => {
+    const classes = byProf[prof].slice().sort((a,b) => timeToMin(a.inicio) - timeToMin(b.inicio));
+    const statuses = classes.map(c => ({ cls: c, st: getStatus(c) }));
+    const cur = statuses.find(x => x.st === 'em_sala');
+    const next = statuses.find(x => x.st === 'agendado');
+    const allDone = statuses.length > 0 && statuses.every(x => x.st === 'saiu');
+    if (cur) emSala.push({ prof, cls: cur.cls, st: 'em_sala' });
+    if (next) proximos.push({ prof, cls: next.cls, st: 'agendado' });
+    if (!cur && !next && allDone) saidos.push({ prof, cls: classes[classes.length-1], st: 'saiu' });
+  });
+  emSala.sort((a,b) => timeToMin(a.cls.fim) - timeToMin(b.cls.fim));
+  proximos.sort((a,b) => timeToMin(a.cls.inicio) - timeToMin(b.cls.inicio));
+  saidos.sort((a,b) => timeToMin(b.cls.fim) - timeToMin(a.cls.fim));
+  return { emSala, proximos, saidos };
+}
+
+const PROF_COLORS = { 'Carlos':'#3b82f6','Pedro':'#8b5cf6','Andréia':'#ec4899','Diogo':'#f59e0b','Márcia':'#10b981','Jeane':'#06b6d4','Renata':'#6366f1','Antonia':'#f97316','Eglisnete':'#14b8a6','Daniel':'#a855f7' };
+function profColor(p) { return PROF_COLORS[p] || '#6b7280'; }
+
+// ==================== 4. VOZ ====================
+function warmSpeech() { if (speechWarmed) return; speechWarmed = true; try { const u = new SpeechSynthesisUtterance(''); u.volume = 0; window.speechSynthesis.speak(u); } catch(e){} }
+function speakRaw(text) {
+  if (!('speechSynthesis' in window) || !voiceState.enabled || !text) return;
+  speechQueue.push(text);
+  processSpeechQueue();
+}
+function processSpeechQueue() {
+  if (speakingNow || speechQueue.length === 0) return;
+  const synth = window.speechSynthesis; if (!synth) return;
+  const text = speechQueue.shift();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'pt-BR'; u.rate = voiceState.rate; u.pitch = voiceState.pitch; u.volume = voiceState.volume;
+  try { const voices = synth.getVoices(); const v = voices.find(x => x.name === voiceState.voiceName); if (v) u.voice = v; } catch(e){}
+  u.onend = () => { speakingNow = false; processSpeechQueue(); };
+  u.onerror = () => { speakingNow = false; processSpeechQueue(); };
+  speakingNow = true;
+  try { synth.speak(u); } catch(e) { speakingNow = false; }
+}
+function stopSpeaking() { speechQueue = []; speakingNow = false; try { window.speechSynthesis.cancel(); } catch(e){} }
+
+function buildSummarySpeech() {
+  const today = getDiaSemana(new Date());
+  const myClasses = schedule.filter(c => c.professor === voiceState.meuProf && c.dia === today && !c.isPlanning).sort((a,b) => timeToMin(a.inicio) - timeToMin(b.inicio));
+  if (myClasses.length === 0) return `Olá, professor ${voiceState.meuProf}. Hoje você não tem aulas. Bom descanso!`;
+  const total = myClasses.length;
+  const mat = myClasses.filter(c => c.turno === 'matutino');
+  const vesp = myClasses.filter(c => c.turno === 'vespertino');
+  const first = myClasses[0];
+  const last = myClasses[myClasses.length - 1];
+  const turmas = [...new Set(myClasses.map(c => c.turma))];
+  let msg = `Olá, professor ${voiceState.meuProf}! Hoje você tem ${total} ${total === 1 ? 'aula' : 'aulas'}`;
+  if (mat.length > 0 && vesp.length > 0) msg += `: ${mat.length} pela manhã e ${vesp.length} pela tarde. `;
+  else if (mat.length > 0) msg += `, ${mat.length === 1 ? 'toda' : 'todas'} pela manhã. `;
+  else msg += `, ${vesp.length === 1 ? 'toda' : 'todas'} pela tarde. `;
+  msg += `A primeira é de ${first.disciplina}, na turma ${first.turma}, ${timeToSpeech(first.inicio)}`;
+  msg += first.turno === 'vespertino' ? ', no turno da tarde. ' : '. ';
+  msg += `A última termina ${timeToSpeech(last.fim)}. Você passará pelas turmas: ${turmas.join(', ')}. `;
+  if (total <= 4) msg += `Sequência: ` + myClasses.map(c => `${c.disciplina} na ${c.turma} ${timeToSpeech(c.inicio)}`).join('. Depois, ') + '.';
+  return msg;
+}
+function speakSummary(force) {
+  if (!voiceState.meuProf || !voiceState.enabled) return;
+  if (!voiceState.summary && !force) return;
+  speakRaw(buildSummarySpeech());
+}
+
+function checkVoiceAnnouncements() {
+  if (!voiceState.meuProf || !voiceState.enabled) return;
+  const today = getDiaSemana(new Date());
+  const n = nowMin();
+  const dKey = todayKey();
+  if (voiceState.firedDate !== dKey) { voiceState.fired = []; voiceState.firedDate = dKey; saveVoiceState(); }
+  const myClasses = schedule.filter(c => c.professor === voiceState.meuProf && c.dia === today && !c.isPlanning).sort((a,b) => timeToMin(a.inicio) - timeToMin(b.inicio));
+  if (myClasses.length === 0) return;
+  const lead = voiceState.leadMin || 10;
+  myClasses.forEach((c, idx) => {
+    const key = `${c.turno}|${c.dia}|${c.aula}|${c.turma}`;
+    const s = timeToMin(c.inicio), e = timeToMin(c.fim);
+    if (voiceState.preClass) { const preAt = s - lead; const k = key + '|pre'; if (n >= preAt && n < preAt + 1 && !hasFired(k)) { markFired(k); speakRaw(`Professor ${voiceState.meuProf}, ${idx === 0 ? 'sua primeira aula' : 'sua próxima aula'} será na turma ${c.turma}, de ${c.disciplina}, em ${lead} minutos.`); } }
+    if (voiceState.classStart) { const k = key + '|start'; if (n >= s && n < s + 1 && !hasFired(k)) { markFired(k); speakRaw(`Professor ${voiceState.meuProf}, sua aula de ${c.disciplina} na turma ${c.turma} está começando agora.`); } }
+    if (voiceState.classEnding) { const k = key + '|ending'; const endAt = e - lead; if (n >= endAt && n < endAt + 1 && !hasFired(k)) { markFired(k); speakRaw(`Atenção professor ${voiceState.meuProf}, sua aula na turma ${c.turma} está encerrando em ${lead} minutos.`); } }
+    if (voiceState.classEnd) { const k = key + '|end'; if (n >= e && n < e + 1 && !hasFired(k)) { markFired(k); if (idx === myClasses.length - 1) speakRaw(`Professor ${voiceState.meuProf}, sua última aula do dia na turma ${c.turma} foi encerrada. Bom descanso!`); else speakRaw(`Professor ${voiceState.meuProf}, sua aula na turma ${c.turma} foi encerrada.`); } }
+  });
+  if (voiceState.transition) {
+    const cur = myClasses.find(c => n >= timeToMin(c.inicio) && n < timeToMin(c.fim));
+    if (cur) {
+      const curIdx = myClasses.indexOf(cur);
+      const next = myClasses[curIdx + 1];
+      if (next && cur.turma !== next.turma) {
+        const k = 'trans|' + dKey + '|' + cur.turma + '|' + next.turma + '|' + next.inicio;
+        const endWarn = timeToMin(cur.fim) - 5;
+        if (n >= endWarn && n < endWarn + 1 && !hasFired(k)) { markFired(k); speakRaw(`Professor ${voiceState.meuProf}, prepare-se para ir da turma ${cur.turma} para a turma ${next.turma} ${timeToSpeech(next.inicio)}.`); }
+      }
+    }
+  }
+  saveVoiceState();
+}
+
+// ==================== 5. RENDER ASSISTENTE ====================
+function renderAssistente() {
+  const content = document.getElementById('assistenteContent');
+  const selectBox = document.getElementById('assistenteSelectBox');
+  if (!content || !selectBox) return;
+
+  if (!voiceState.meuProf) {
+    content.style.display = 'none'; selectBox.style.display = 'block';
+    const inp = document.getElementById('assistenteProfInput'); if (inp) inp.value = '';
+    return;
+  }
+
+  const activeEl = document.activeElement;
+  if (activeEl && activeEl.tagName === 'TEXTAREA' && activeEl.closest('#assistenteContent')) return;
+
+  selectBox.style.display = 'none'; content.style.display = 'block';
+
+  const today = getDiaSemana(new Date());
+  const n = nowMin();
+  const dKey = todayKey();
+  const myClasses = schedule.filter(c => c.professor === voiceState.meuProf && c.dia === today && !c.isPlanning).sort((a,b) => timeToMin(a.inicio) - timeToMin(b.inicio));
+  const mat = myClasses.filter(c => c.turno === 'matutino');
+  const vesp = myClasses.filter(c => c.turno === 'vespertino');
+  const cur = myClasses.find(c => n >= timeToMin(c.inicio) && n < timeToMin(c.fim));
+  const next = myClasses.find(c => timeToMin(c.inicio) > n);
+  const finished = myClasses.filter(c => n >= timeToMin(c.fim));
+
+  const voiceBadge = voiceState.enabled ? '<span class="voice-active-badge on">🔊 Voz ATIVA</span>' : '<span class="voice-active-badge off">🔇 Voz desligada</span>';
+
+  let html = `<div class="voice-hero">
+    <div style="font-size:.9rem; opacity:.85;">Olá,</div>
+    <h2>Professor ${escapeHtml(voiceState.meuProf)}</h2>
+    <div class="big-count">${myClasses.length}</div>
+    <div class="sub">aula(s) hoje · ${finished.length} concluída(s)</div>
+    <div class="shift-chips">
+      ${mat.length > 0 ? `<span class="shift-chip mat">🌅 <span class="num">${mat.length}</span> manhã</span>` : ''}
+      ${vesp.length > 0 ? `<span class="shift-chip vesp">🌇 <span class="num">${vesp.length}</span> tarde</span>` : ''}
+      ${mat.length === 0 && vesp.length === 0 ? `<span class="shift-chip">Sem aulas</span>` : ''}
+    </div>
+    <div style="margin-top:10px;">${voiceBadge}</div>
+    <div class="hero-actions">
+      <button class="btn" id="btnRepetirResumo">🔁 Repetir Resumo</button>
+      <button class="btn" id="btnPararVozAssistente">⏹️ Parar Voz</button>
+      <button class="btn" id="btnTrocarAssistente">🔄 Trocar Professor</button>
+    </div>
+  </div>`;
+
+  if (cur) {
+    const remain = timeToMin(cur.fim) - n;
+    html += `<div class="voice-status-card"><h3>🟢 Acontecendo agora</h3>
+      <div class="voice-now"><div class="icon">📚</div>
+        <div class="info"><div class="title">${escapeHtml(cur.disciplina)} · Turma ${escapeHtml(cur.turma)}</div>
+        <div class="sub">${cur.inicio} – ${cur.fim} · ${remain} min · ${cur.turno === 'matutino' ? '🌅 manhã' : '🌇 tarde'}</div></div>
+      </div></div>`;
+  } else if (next) {
+    const wait = timeToMin(next.inicio) - n;
+    html += `<div class="voice-status-card"><h3>⏭️ Próxima aula</h3>
+      <div class="voice-now next"><div class="icon">⏰</div>
+        <div class="info"><div class="title">${escapeHtml(next.disciplina)} · Turma ${escapeHtml(next.turma)}</div>
+        <div class="sub">${next.inicio} – ${next.fim} · em ${wait} min · ${next.turno === 'matutino' ? '🌅 manhã' : '🌇 tarde'}</div></div>
+      </div></div>`;
+  } else {
+    html += `<div class="voice-status-card"><h3>📋 Status</h3>
+      <div class="voice-now none"><div class="icon">☕</div>
+        <div class="info"><div class="title">Sem aulas pendentes hoje</div><div class="sub">Bom descanso!</div></div>
+      </div></div>`;
+  }
+
+  if (myClasses.length > 0) {
+    html += `<div class="voice-status-card"><h3>📅 Minha agenda de hoje <span style="font-size:0.75rem; font-weight:400; color:#64748b; margin-left:auto;">(clique para editar o diário)</span></h3>`;
+    
+    const grupos = [{ label: '🌅 Manhã', list: mat, cor: '#f59e0b' }, { label: '🌇 Tarde', list: vesp, cor: '#ec4899' }];
+    grupos.forEach(g => {
+      if (g.list.length === 0) return;
+      html += `<div style="margin-top:10px; font-size:.75rem; font-weight:800; color:${g.cor}; text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:8px;">
+        ${g.label} <span style="background:#e2e8f0; color:#334155; padding:1px 8px; border-radius:999px; font-size:.7rem;">${g.list.length}</span>
+      </div>`;
+      
+      g.list.forEach(c => {
+        const isCur = cur === c;
+        const isPast = n >= timeToMin(c.fim);
+        const cls = isPast ? 'none' : isCur ? 'current' : 'next';
+        const icon = isPast ? '✅' : isCur ? '🟢' : '⏳';
+        
+        const key = diarioKey(voiceState.meuProf, dKey, c.turno, c.aula);
+        if (!diario[key]) diario[key] = { worked: '', next: '' };
+        diario[key].turma = c.turma; diario[key].disciplina = c.disciplina; diario[key].prof = voiceState.meuProf;
+        diario[key].date = dKey; diario[key].turno = c.turno; diario[key].aula = c.aula;
+        const entry = diario[key];
+
+        const hasContent = (entry.worked && entry.worked.trim()) || (entry.next && entry.next.trim());
+        const isExpanded = diarioExpanded[key] !== undefined ? diarioExpanded[key] : hasContent;
+
+        let hintHtml = '';
+        const prevEntries = Object.entries(diario)
+          .filter(([k, v]) => v && v.turma === c.turma && v.prof === voiceState.meuProf && v.date < dKey && v.disciplina === c.disciplina && v.next && v.next.trim())
+          .sort((a, b) => b[1].date.localeCompare(a[1].date));
+        if (prevEntries.length > 0) {
+          const [, pVal] = prevEntries[0];
+          const parts = pVal.date.split('-');
+          const dataFmt = `${parts[2]}/${parts[1]}`;
+          hintHtml = `<div class="diario-hint">📌 <b>Planejado na aula anterior (${dataFmt}):</b> ${escapeHtml(pVal.next)}</div>`;
+        }
+
+        html += `<div class="agenda-accordion ${cls}" data-diario-container="${key}">
+          <div class="agenda-header-toggle">
+            <div class="icon" style="font-size:1.8rem; flex-shrink:0;">${icon}</div>
+            <div class="info" style="flex:1; min-width:0;">
+              <div class="title" style="font-weight:700; font-size:.95rem;">${escapeHtml(c.disciplina)} · ${escapeHtml(c.turma)}</div>
+              <div class="sub" style="font-size:.8rem; color:#6b7280; margin-top:2px;">${c.inicio} – ${c.fim} · ${c.aula} aula</div>
+            </div>
+            <div class="toggle-arrow" style="transform: rotate(${isExpanded ? '180' : '0'}deg);">▼</div>
+          </div>
+          
+          <div class="agenda-body" style="display: ${isExpanded ? 'block' : 'none'};">
+            ${hintHtml}
+            <div class="diario-label">✅ O que foi trabalhado nesta aula</div>
+            <textarea class="diario-textarea" data-diario-key="${key}" data-field="worked" placeholder="Ex: Exercícios cap. 3, páginas 45-50, correção no quadro...">${escapeHtml(entry.worked || '')}</textarea>
+            
+            <div class="diario-label">📝 O que será trabalhado na próxima aula</div>
+            <textarea class="diario-textarea" data-diario-key="${key}" data-field="next" placeholder="Ex: Correção dos exercícios + introdução ao cap. 4...">${escapeHtml(entry.next || '')}</textarea>
+            
+            <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+              <span class="diario-save-status" data-diario-status="${key}" style="opacity:.5;">Salvo automaticamente</span>
+            </div>
+          </div>
+        </div>`;
+      });
+    });
+    html += `</div>`;
+    saveDiario();
+  }
+
+  content.innerHTML = html;
+
+  content.querySelectorAll('.agenda-header-toggle').forEach(toggle => {
+    toggle.addEventListener('click', (e) => {
+      if (e.target.tagName === 'TEXTAREA') return;
+      const container = toggle.closest('.agenda-accordion');
+      const key = container.dataset.diarioContainer;
+      const body = container.querySelector('.agenda-body');
+      const arrow = toggle.querySelector('.toggle-arrow');
+
+      if (body.style.display === 'none') {
+        body.style.display = 'block';
+        arrow.style.transform = 'rotate(180deg)';
+        diarioExpanded[key] = true;
+      } else {
+        body.style.display = 'none';
+        arrow.style.transform = 'rotate(0deg)';
+        diarioExpanded[key] = false;
+      }
+    });
+  });
+
+  content.querySelectorAll('.diario-textarea').forEach(ta => {
+    const key = ta.dataset.diarioKey;
+    const field = ta.dataset.field;
+    let timer = null;
+    const doSave = () => {
+      if (!diario[key]) diario[key] = {};
+      diario[key][field] = ta.value;
+      saveDiario();
+      const statusEl = content.querySelector(`[data-diario-status="${key}"]`);
+      if (statusEl) {
+        statusEl.textContent = '✓ Salvo';
+        statusEl.style.color = '#10b981';
+        statusEl.style.opacity = '1';
+        setTimeout(() => { if (statusEl.textContent === '✓ Salvo') statusEl.style.opacity = '.5'; }, 1800);
+      }
+    };
+    ta.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(doSave, 500); });
+    ta.addEventListener('blur', () => { clearTimeout(timer); doSave(); });
+  });
+
+  document.getElementById('btnRepetirResumo').onclick = () => { stopSpeaking(); speakSummary(true); };
+  document.getElementById('btnPararVozAssistente').onclick = () => { stopSpeaking(); showToast('Voz', 'Fala interrompida.'); };
+  document.getElementById('btnTrocarAssistente').onclick = () => {
+    voiceState.meuProf = ''; saveVoiceState(); stopSpeaking(); renderAssistente();
+  };
+}
+
+function populateVoiceList() {
+  const sel = document.getElementById('vozSelect'); if (!sel) return;
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  const ptVoices = voices.filter(v => v.lang.toLowerCase().startsWith('pt'));
+  const others = voices.filter(v => !v.lang.toLowerCase().startsWith('pt'));
+  sel.innerHTML = '<option value="">Padrão do sistema</option>' +
+    [...ptVoices, ...others].map(v => `<option value="${escapeHtml(v.name)}"${voiceState.voiceName === v.name ? ' selected' : ''}>${escapeHtml(v.name)} (${v.lang})</option>`).join('');
+}
+function updateVoiceMasterLabel() {
+  const el = document.getElementById('vozStatusLabel'); if (!el) return;
+  el.innerHTML = voiceState.enabled ? '<span class="voice-active-badge on">🔊 Voz ATIVA</span>' : '<span class="voice-active-badge off">🔇 Voz DESLIGADA</span>';
+}
+function syncVoiceUI() {
+  const map = { vozMaster: voiceState.enabled, vozResumo: voiceState.summary, vozPreAula: voiceState.preClass, vozInicioAula: voiceState.classStart, vozFimAula: voiceState.classEnding, vozFim: voiceState.classEnd, vozTransicao: voiceState.transition };
+  Object.entries(map).forEach(([id, val]) => { const el = document.getElementById(id); if (el) el.checked = val; });
+  const lead = document.getElementById('vozLeadMin'); if (lead) lead.value = voiceState.leadMin;
+  const rate = document.getElementById('vozRate'); if (rate) rate.value = voiceState.rate;
+  const pitch = document.getElementById('vozPitch'); if (pitch) pitch.value = voiceState.pitch;
+  const vol = document.getElementById('vozVolume'); if (vol) vol.value = voiceState.volume;
+  const rv = document.getElementById('vozRateVal'); if (rv) rv.textContent = Number(voiceState.rate).toFixed(1);
+  const pv = document.getElementById('vozPitchVal'); if (pv) pv.textContent = Number(voiceState.pitch).toFixed(1);
+  const vv = document.getElementById('vozVolumeVal'); if (vv) vv.textContent = Math.round(voiceState.volume*100) + '%';
+  updateVoiceMasterLabel();
+}
+
+function setupVoiceUI() {
+  const toggles = { vozMaster: 'enabled', vozResumo: 'summary', vozPreAula: 'preClass', vozInicioAula: 'classStart', vozFimAula: 'classEnding', vozFim: 'classEnd', vozTransicao: 'transition' };
+  Object.entries(toggles).forEach(([id, key]) => {
+    const el = document.getElementById(id); if (!el) return;
+    el.addEventListener('change', e => { voiceState[key] = e.target.checked; saveVoiceState(); updateVoiceMasterLabel(); if (key === 'enabled' && e.target.checked) warmSpeech(); });
+  });
+  const leadEl = document.getElementById('vozLeadMin');
+  if (leadEl) leadEl.addEventListener('change', e => { const v = Math.max(1, Math.min(30, parseInt(e.target.value) || 10)); voiceState.leadMin = v; e.target.value = v; saveVoiceState(); });
+  const rateEl = document.getElementById('vozRate');
+  if (rateEl) rateEl.addEventListener('input', e => { voiceState.rate = parseFloat(e.target.value); const rv = document.getElementById('vozRateVal'); if (rv) rv.textContent = voiceState.rate.toFixed(1); saveVoiceState(); });
+  const pitchEl = document.getElementById('vozPitch');
+  if (pitchEl) pitchEl.addEventListener('input', e => { voiceState.pitch = parseFloat(e.target.value); const pv = document.getElementById('vozPitchVal'); if (pv) pv.textContent = voiceState.pitch.toFixed(1); saveVoiceState(); });
+  const volEl = document.getElementById('vozVolume');
+  if (volEl) volEl.addEventListener('input', e => { voiceState.volume = parseFloat(e.target.value); const vv = document.getElementById('vozVolumeVal'); if (vv) vv.textContent = Math.round(voiceState.volume*100) + '%'; saveVoiceState(); });
+  const vozSel = document.getElementById('vozSelect');
+  if (vozSel) vozSel.addEventListener('change', e => { voiceState.voiceName = e.target.value; saveVoiceState(); });
+
+  document.querySelectorAll('[data-preset]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = btn.dataset.preset;
+      if (p === 'full') { voiceState.enabled = true; voiceState.summary = true; voiceState.preClass = true; voiceState.classStart = true; voiceState.classEnding = true; voiceState.classEnd = true; voiceState.transition = true; showToast('Modo Completo', 'Todos os anúncios ativados.'); }
+      else if (p === 'avisos') { voiceState.enabled = true; voiceState.summary = false; voiceState.preClass = true; voiceState.classStart = false; voiceState.classEnding = true; voiceState.classEnd = false; voiceState.transition = true; showToast('Apenas Avisos', 'Só avisos principais.'); }
+      else if (p === 'resumo') { voiceState.enabled = true; voiceState.summary = true; voiceState.preClass = false; voiceState.classStart = false; voiceState.classEnding = false; voiceState.classEnd = false; voiceState.transition = false; showToast('Só Resumo', 'Apenas o resumo diário.'); }
+      else if (p === 'silence') { voiceState.enabled = false; showToast('Silenciado', 'Todos os anúncios desligados.'); stopSpeaking(); }
+      saveVoiceState(); syncVoiceUI(); if (p !== 'silence') warmSpeech();
+    });
+  });
+
+  const btnTest = document.getElementById('btnTestVoz');
+  if (btnTest) btnTest.addEventListener('click', () => { warmSpeech(); speakRaw(`Teste de voz. Olá ${voiceState.meuProf || 'professor'}, este é um exemplo de anúncio.`); });
+  const btnStop = document.getElementById('btnPararVoz');
+  if (btnStop) btnStop.addEventListener('click', () => { stopSpeaking(); showToast('Voz', 'Fala interrompida.'); });
+
+  const btnAtivar = document.getElementById('btnAtivarAssistente');
+  if (btnAtivar) btnAtivar.addEventListener('click', () => {
+    const nome = document.getElementById('assistenteProfInput').value.trim();
+    if (!nome) { showToast('Aviso', 'Digite seu nome.', 'err'); return; }
+    const validProfs = [...new Set(schedule.filter(c => !c.isPlanning).map(c => c.professor))];
+    const match = validProfs.find(p => p.toLowerCase() === nome.toLowerCase());
+    if (!match) { showToast('Não encontrado', `"${nome}" não está na grade.`, 'err'); return; }
+    voiceState.meuProf = match;
+    saveVoiceState(); warmSpeech(); renderAssistente();
+    const sKey = todayKey() + '|' + match;
+    if (voiceState.enabled && voiceState.summary && voiceState.lastSummary !== sKey) {
+      voiceState.lastSummary = sKey; saveVoiceState();
+      setTimeout(() => speakSummary(true), 400);
+    }
+    showToast('Assistente Ativado', `Professor ${match}, bem-vindo!`, 'ok');
+  });
+
+  const inputAssist = document.getElementById('assistenteProfInput');
+  if (inputAssist) inputAssist.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btnAtivarAssistente').click(); } });
+
+  if (window.speechSynthesis) { populateVoiceList(); window.speechSynthesis.onvoiceschanged = populateVoiceList; }
+  syncVoiceUI();
+}
+
+// ==================== 6. QR CODE SYNC ====================
+let syncSendMode = 'small';
+let syncSessionId = null;
+let syncChunks = [];
+let syncChunkIndex = 0;
+let syncChunkInterval = null;
+let syncChunkSpeed = 1200;
+let syncQRPaused = false;
+let syncQRStepMode = false;
+
+let syncReceiveSession = null;
+let syncReceiveTotal = 0;
+let syncReceiveChunks = {};
+let syncReceiveActive = false;
+let syncReceiveApplied = false;
+
+const SYNC_CHUNK_SIZE = 280;
+
+function chunkify(str, size) {
+  const out = [];
+  for (let i = 0; i < str.length; i += size) out.push(str.slice(i, i + size));
+  return out;
+}
+function makeSessionId() { return Math.random().toString(36).slice(2, 8); }
+function stopChunkedSend() {
+  if (syncChunkInterval) { clearTimeout(syncChunkInterval); syncChunkInterval = null; }
+  syncChunks = []; syncChunkIndex = 0; syncSessionId = null;
+}
+
+function setupSyncUI() {
+  const radarBox = document.getElementById('syncRadarBox');
+  const mainButtons = document.getElementById('syncMainButtons');
+  const areaSend = document.getElementById('areaSend');
+  const areaReceive = document.getElementById('areaReceive');
+  const btnShowSend = document.getElementById('btnShowSend');
+  const btnShowReceive = document.getElementById('btnShowReceive');
+  const btnCloseSend = document.getElementById('btnCloseSend');
+  const btnCloseReceive = document.getElementById('btnCloseReceive');
+  const btnShareNative = document.getElementById('btnShareNative');
+  const statusMsg = document.getElementById('syncStatusMsg');
+  const modeBtns = document.querySelectorAll('.sync-mode-btn');
+
+  const btnFullscreenQR = document.getElementById('btnFullscreenQR');
+  const btnPauseQR = document.getElementById('btnPauseQR');
+  const btnStepMode = document.getElementById('btnStepMode');
+  const btnBrightMode = document.getElementById('btnBrightMode');
+  const btnPrevChunk = document.getElementById('btnPrevChunk');
+  const btnNextChunk = document.getElementById('btnNextChunk');
+  const stepControls = document.getElementById('stepControls');
+  const stepLabel = document.getElementById('stepLabel');
+  const receiveCameraSelect = document.getElementById('receiveCameraSelect');
+  const btnSwitchCamera = document.getElementById('btnSwitchCamera');
+  const receiveCameraInfo = document.getElementById('receiveCameraInfo');
+  const receiveFlash = document.getElementById('receiveFlash');
+
+  let wakeLock = null;
+
+  function renderCurrentChunk() {
+    if (!syncChunks.length) return;
+    const idx = syncChunkIndex % syncChunks.length;
+    const total = syncChunks.length;
+    const data = syncChunks[idx];
+    const paddedIdx = String(idx).padStart(2, '0');
+    const paddedTotal = String(total).padStart(2, '0');
+    const payloadStr = `F${paddedIdx}/${paddedTotal}|${syncSessionId}|${data}`;
+
+    const canvasWrap = document.getElementById('qrcode-chunked-canvas');
+    if (!canvasWrap) return;
+    canvasWrap.innerHTML = '';
+    new QRCode(canvasWrap, {
+      text: payloadStr,
+      width: 340, height: 340,
+      colorDark: "#000000", colorLight: "#ffffff",
+      correctLevel: QRCode.CorrectLevel.M
+    });
+
+    const counter = document.getElementById('sendChunkCounter');
+    if (counter) counter.textContent = `${idx + 1}/${total}`;
+    const fill = document.getElementById('sendProgressFill');
+    if (fill) fill.style.width = (((idx + 1) / total) * 100) + '%';
+    const msg = document.getElementById('sendChunkMsg');
+    if (msg) {
+      const st = syncQRPaused ? '⏸️ PAUSADO' : syncQRStepMode ? '👆 manual' : '▶️ auto';
+      msg.textContent = `QR ${idx + 1} de ${total} · ${st}`;
+    }
+    if (stepLabel) stepLabel.textContent = `${idx + 1}/${total}`;
+  }
+
+  function scheduleNextChunk() {
+    if (syncChunkInterval) clearTimeout(syncChunkInterval);
+    syncChunkInterval = setTimeout(() => {
+      if (!syncQRPaused && !syncQRStepMode && syncChunks.length) {
+        syncChunkIndex = (syncChunkIndex + 1) % syncChunks.length;
+        renderCurrentChunk();
+      }
+      scheduleNextChunk();
+    }, syncChunkSpeed);
+  }
+
+  function startChunkedSend(payload) {
+    stopChunkedSend();
+    syncQRPaused = false;
+    syncQRStepMode = false;
+    if (stepControls) stepControls.style.display = 'none';
+    if (btnPauseQR) { btnPauseQR.textContent = '⏸️ Pausar'; btnPauseQR.classList.remove('success'); btnPauseQR.classList.add('warning'); }
+    if (btnStepMode) btnStepMode.classList.remove('success');
+
+    const jsonStr = JSON.stringify(payload);
+    const compressed = LZString.compressToEncodedURIComponent(jsonStr);
+
+    if (compressed.length <= 900) {
+      const wrap = document.getElementById('qrcode');
+      const chunkedWrap = document.getElementById('qrcode-chunked');
+      if (wrap) wrap.style.display = 'flex';
+      if (chunkedWrap) chunkedWrap.style.display = 'none';
+      const qrDiv = document.getElementById('qrcode');
+      qrDiv.innerHTML = '';
+      new QRCode(qrDiv, {
+        text: 'S1|' + compressed,
+        width: 340, height: 340,
+        colorDark: "#000000", colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      return;
+    }
+
+    syncSessionId = makeSessionId();
+    syncChunks = chunkify(compressed, SYNC_CHUNK_SIZE);
+    syncChunkIndex = 0;
+
+    const wrap = document.getElementById('qrcode');
+    const chunkedWrap = document.getElementById('qrcode-chunked');
+    if (wrap) wrap.style.display = 'none';
+    if (chunkedWrap) chunkedWrap.style.display = 'flex';
+
+    renderCurrentChunk();
+    scheduleNextChunk();
+  }
+
+  function buildPayloadForMode(mode) {
+    if (mode === 'small') {
+      const hoje = todayKey();
+      const payload = { type: 'diario', diario: {} };
+      Object.keys(diario).forEach(k => {
+        if (diario[k].date === hoje) payload.diario[k] = diario[k];
+      });
+      return payload;
+    }
+    return { type: 'full', log, settings, rawSchedule: RAW, voice: voiceState, diario, exportedAt: new Date().toISOString(), version: 1 };
+  }
+
+  function setMode(mode) {
+    syncSendMode = mode;
+    modeBtns.forEach(b => b.classList.toggle('active', b.dataset.syncMode === mode));
+    const title = document.getElementById('sendTitle');
+    const subtitle = document.getElementById('sendSubtitle');
+    if (mode === 'small') {
+      if (title) title.textContent = 'Aponte a câmera do outro aparelho aqui';
+      if (subtitle) subtitle.textContent = 'Este código contém as anotações do Diário de Hoje.';
+    } else {
+      if (title) title.textContent = 'Aponte o QR animado (backup completo)';
+      if (subtitle) subtitle.textContent = 'A tela troca de QR sozinha. Se estiver difícil, use "⏸️ Pausar".';
+    }
+    startChunkedSend(buildPayloadForMode(mode));
+  }
+
+  modeBtns.forEach(b => b.addEventListener('click', () => setMode(b.dataset.syncMode)));
+
+  const speedInput = document.getElementById('sendSpeed');
+  const speedLabel = document.getElementById('sendSpeedLabel');
+  if (speedInput) {
+    speedInput.addEventListener('input', () => {
+      syncChunkSpeed = parseInt(speedInput.value);
+      if (speedLabel) speedLabel.textContent = (syncChunkSpeed / 1000).toFixed(1) + 's';
+    });
+  }
+
+  if (btnPauseQR) {
+    btnPauseQR.addEventListener('click', () => {
+      syncQRPaused = !syncQRPaused;
+      if (syncQRPaused) {
+        btnPauseQR.textContent = '▶️ Continuar';
+        btnPauseQR.classList.remove('warning'); btnPauseQR.classList.add('success');
+      } else {
+        btnPauseQR.textContent = '⏸️ Pausar';
+        btnPauseQR.classList.remove('success'); btnPauseQR.classList.add('warning');
+      }
+      renderCurrentChunk();
+    });
+  }
+
+  if (btnStepMode) {
+    btnStepMode.addEventListener('click', () => {
+      syncQRStepMode = !syncQRStepMode;
+      if (syncQRStepMode) {
+        syncQRPaused = true;
+        if (btnPauseQR) { btnPauseQR.textContent = '▶️ Continuar'; btnPauseQR.classList.remove('warning'); btnPauseQR.classList.add('success'); }
+        btnStepMode.classList.add('success');
+        btnStepMode.textContent = '👆 Passo: ON';
+        if (stepControls) stepControls.style.display = 'flex';
+      } else {
+        btnStepMode.classList.remove('success');
+        btnStepMode.textContent = '👆 Passo a passo';
+        if (stepControls) stepControls.style.display = 'none';
+      }
+      renderCurrentChunk();
+    });
+  }
+  if (btnNextChunk) {
+    btnNextChunk.addEventListener('click', () => {
+      if (!syncChunks.length) return;
+      syncChunkIndex = (syncChunkIndex + 1) % syncChunks.length;
+      renderCurrentChunk();
+    });
+  }
+  if (btnPrevChunk) {
+    btnPrevChunk.addEventListener('click', () => {
+      if (!syncChunks.length) return;
+      syncChunkIndex = (syncChunkIndex - 1 + syncChunks.length) % syncChunks.length;
+      renderCurrentChunk();
+    });
+  }
+
+  if (btnFullscreenQR) {
+    btnFullscreenQR.addEventListener('click', async () => {
+      const el = areaSend;
+      try {
+        if (!document.fullscreenElement) await el.requestFullscreen();
+        else await document.exitFullscreen();
+      } catch (e) { showToast('Tela cheia', 'Não suportado neste navegador.', 'err'); }
+    });
+  }
+
+  if (btnBrightMode) {
+    btnBrightMode.addEventListener('click', async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          if (wakeLock) {
+            await wakeLock.release(); wakeLock = null;
+            btnBrightMode.classList.remove('success'); btnBrightMode.textContent = '☀️ Brilho máx.';
+            showToast('Brilho', 'Wake Lock desativado.');
+          } else {
+            wakeLock = await navigator.wakeLock.request('screen');
+            btnBrightMode.classList.add('success'); btnBrightMode.textContent = '☀️ Brilho ON';
+            showToast('Brilho', 'Tela mantida acesa. Aumente o brilho manualmente.');
+          }
+        } else {
+          showToast('Brilho', 'Este navegador não suporta Wake Lock. Aumente o brilho manualmente.');
+        }
+      } catch (e) { showToast('Brilho', 'Erro: ' + e.message, 'err'); }
+    });
+  }
+
+  async function populateCameras() {
+    if (!receiveCameraInfo) return;
+    try {
+      const cams = await Html5Qrcode.getCameras();
+      if (!cams || cams.length === 0) { receiveCameraInfo.textContent = '⚠️ Nenhuma câmera encontrada'; return; }
+      receiveCameraSelect.innerHTML = cams.map(c => `<option value="${c.id}">${(c.label || 'Câmera').slice(0, 40)}</option>`).join('');
+      const back = cams.find(c => /back|rear|traseira|environment/i.test(c.label));
+      if (back) receiveCameraSelect.value = back.id;
+      receiveCameraInfo.textContent = `📹 ${cams.length} câmera(s) · selecione a melhor`;
+    } catch (e) { receiveCameraInfo.textContent = '⚠️ Erro ao listar câmeras: ' + e.message; }
+  }
+
+  async function startReceiveCamera(deviceId) {
+    if (html5QrCode) {
+      try { await html5QrCode.stop(); } catch(e) {}
+      try { html5QrCode.clear(); } catch(e) {}
+    }
+    html5QrCode = new Html5Qrcode("reader");
+    const config = {
+      fps: 20,
+      qrbox: (w, h) => { const min = Math.min(w, h); return { width: Math.floor(min * 0.8), height: Math.floor(min * 0.8) }; },
+      aspectRatio: 1.0,
+      useBarCodeDetectorIfSupported: true,
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+    };
+    const camArg = deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" };
+
+    try {
+      await html5QrCode.start(camArg, config,
+        (decodedText) => {
+          if (receiveFlash) { receiveFlash.style.opacity = '1'; setTimeout(() => receiveFlash.style.opacity = '0', 180); }
+          const last = document.getElementById('receiveLastScan');
+          if (last) last.textContent = '👁 ' + decodedText.slice(0, 80) + (decodedText.length > 80 ? '...' : '');
+          handleSyncScan(decodedText, resetView, statusMsg);
+        },
+        () => {}
+      );
+      const video = document.querySelector('#reader video');
+      if (video) {
+        const checkRes = () => {
+          if (video.videoWidth > 0) receiveCameraInfo.textContent = `📹 ${video.videoWidth}×${video.videoHeight}`;
+          else setTimeout(checkRes, 400);
+        };
+        setTimeout(checkRes, 600);
+      }
+    } catch (e) {
+      statusMsg.textContent = 'Erro ao acessar câmera: ' + (e.message || e);
+      statusMsg.className = 'sync-status err'; statusMsg.style.display = 'block';
+    }
+  }
+
+  if (btnSwitchCamera) {
+    btnSwitchCamera.addEventListener('click', async () => {
+      const camId = receiveCameraSelect.value;
+      if (!camId) return;
+      await startReceiveCamera(camId);
+    });
+  }
+
+  function resetView() {
+    radarBox.style.display = 'block';
+    mainButtons.style.display = 'grid';
+    areaSend.style.display = 'none';
+    areaReceive.style.display = 'none';
+    statusMsg.style.display = 'none';
+    document.getElementById('reader').style.display = 'none';
+    stopChunkedSend();
+    syncQRPaused = false; syncQRStepMode = false;
+    syncReceiveActive = false; syncReceiveApplied = false;
+    syncReceiveSession = null; syncReceiveTotal = 0; syncReceiveChunks = {};
+    const rpb = document.getElementById('receiveProgressBox'); if (rpb) rpb.style.display = 'none';
+    if (wakeLock) { try { wakeLock.release(); } catch(e){} wakeLock = null; }
+    if (html5QrCode) { try { html5QrCode.stop(); } catch(e){} }
+    try { if (document.fullscreenElement) document.exitFullscreen(); } catch(e){}
+  }
+
+  btnShowSend.addEventListener('click', () => {
+    radarBox.style.display = 'none'; mainButtons.style.display = 'none'; areaSend.style.display = 'block';
+    const wrap = document.getElementById('qrcode'); const chunkedWrap = document.getElementById('qrcode-chunked');
+    if (wrap) wrap.style.display = 'flex'; if (chunkedWrap) chunkedWrap.style.display = 'none';
+    document.getElementById('qrcode').innerHTML = ''; document.getElementById('qrcode-chunked-canvas').innerHTML = '';
+    setMode(syncSendMode);
+  });
+
+  btnCloseSend.addEventListener('click', resetView);
+  btnCloseReceive.addEventListener('click', resetView);
+
+  btnShowReceive.addEventListener('click', async () => {
+    radarBox.style.display = 'none'; mainButtons.style.display = 'none'; areaReceive.style.display = 'block';
+    document.getElementById('reader').style.display = 'block';
+    const rpb = document.getElementById('receiveProgressBox'); if (rpb) rpb.style.display = 'block';
+    document.getElementById('receiveChunkMsg').textContent = 'Aguardando primeiro QR Code...';
+    document.getElementById('receiveChunkCounter').textContent = '0/0';
+    document.getElementById('receiveProgressFill').style.width = '0%';
+    document.getElementById('receiveSessionId').textContent = '—';
+    const last = document.getElementById('receiveLastScan'); if (last) last.textContent = '';
+    syncReceiveActive = true; syncReceiveApplied = false;
+    syncReceiveSession = null; syncReceiveTotal = 0; syncReceiveChunks = {};
+
+    await populateCameras();
+    const selected = receiveCameraSelect.value || null;
+    await startReceiveCamera(selected);
+  });
+
+  btnShareNative.addEventListener('click', async () => {
+    const payload = buildPayloadForMode(syncSendMode);
+    const dataStr = JSON.stringify(payload, null, 2);
+    const file = new File([dataStr], `fluxo-${syncSendMode}-${todayKey()}.json`, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Fluxo - Backup', text: 'Dados do painel Fluxo.' }); }
+      catch (err) { if (err.name !== 'AbortError') showToast('Erro', 'Não foi possível compartilhar.', 'err'); }
+    } else {
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `fluxo-${syncSendMode}-${todayKey()}.json`; a.click();
+      showToast('Download', 'Seu aparelho não suporta compartilhamento direto. Baixamos o arquivo.', 'ok');
+    }
+  });
+}
+
+function handleSyncScan(decodedText, resetView, statusMsg) {
+  if (!syncReceiveActive || syncReceiveApplied) return;
+  const chunkMatch = decodedText.match(/^F(\d+)\/(\d+)\|([a-z0-9]+)\|([\s\S]+)$/);
+  if (chunkMatch) {
+    const idx = parseInt(chunkMatch[1]);
+    const total = parseInt(chunkMatch[2]);
+    const sessionId = chunkMatch[3];
+    const data = chunkMatch[4];
+
+    if (syncReceiveSession !== sessionId) {
+      syncReceiveSession = sessionId; syncReceiveTotal = total; syncReceiveChunks = {};
+    }
+    if (syncReceiveChunks[idx] === undefined) syncReceiveChunks[idx] = data;
+
+    const received = Object.keys(syncReceiveChunks).length;
+    document.getElementById('receiveChunkCounter').textContent = `${received}/${syncReceiveTotal}`;
+    document.getElementById('receiveProgressFill').style.width = ((received / syncReceiveTotal) * 100) + '%';
+    document.getElementById('receiveSessionId').textContent = 'ID ' + sessionId;
+    document.getElementById('receiveChunkMsg').textContent = received === syncReceiveTotal ? '✅ Todas as partes recebidas! Aplicando...' : `Recebendo... faltam ${syncReceiveTotal - received} parte(s)`;
+
+    if (received === syncReceiveTotal) {
+      syncReceiveApplied = true;
+      let full = '';
+      for (let i = 0; i < syncReceiveTotal; i++) full += syncReceiveChunks[i];
+      applyReceivedPayload(full, true, resetView, statusMsg);
+    }
+    return;
+  }
+
+  if (decodedText.startsWith('S1|')) {
+    syncReceiveApplied = true;
+    applyReceivedPayload(decodedText.slice(3), false, resetView, statusMsg);
+    return;
+  }
+
+  syncReceiveApplied = true;
+  applyReceivedPayload(decodedText, false, resetView, statusMsg);
+}
+
+function applyReceivedPayload(compressed, isChunked, resetView, statusMsg) {
+  try {
+    const decompressed = LZString.decompressFromEncodedURIComponent(compressed);
+    if (!decompressed) throw new Error('Falha ao descomprimir (dados corrompidos)');
+    const data = JSON.parse(decompressed);
+    if (html5QrCode) { try { html5QrCode.stop(); } catch(e){} }
+
+    if (data.type === 'diario' && data.diario) {
+      mergeDiario(data.diario);
+      statusMsg.textContent = '✅ Diário recebido com sucesso!'; statusMsg.className = 'sync-status ok'; statusMsg.style.display = 'block';
+      saveDiario(); renderAssistente(); showToast('Sincronizado', 'Diário atualizado.', 'ok');
+      setTimeout(resetView, 1800); return;
+    }
+
+    if (data.type === 'full') {
+      if (data.log) log = data.log;
+      if (data.settings) Object.assign(settings, data.settings);
+      if (data.rawSchedule) RAW = data.rawSchedule;
+      if (data.voice) { voiceState = Object.assign(voiceState, data.voice); if (!Array.isArray(voiceState.fired)) voiceState.fired = []; }
+      if (data.diario) diario = data.diario;
+      applyTimeSettings(); saveState(); saveVoiceState(); saveDiario();
+      schedule = buildSchedule(); populateProfFilters(); renderAll(); syncVoiceUI();
+      statusMsg.textContent = '✅ Backup completo recebido!'; statusMsg.className = 'sync-status ok'; statusMsg.style.display = 'block';
+      showToast('Sincronizado', 'Backup completo aplicado.', 'ok');
+      setTimeout(resetView, 1800); return;
+    }
+
+    if (data.diario) {
+      mergeDiario(data.diario);
+      statusMsg.textContent = '✅ Diário recebido!'; statusMsg.className = 'sync-status ok'; statusMsg.style.display = 'block';
+      saveDiario(); renderAssistente(); showToast('Sincronizado', 'Diário atualizado.', 'ok');
+      setTimeout(resetView, 1800); return;
+    }
+    throw new Error('Formato desconhecido');
+  } catch (e) {
+    console.error(e);
+    syncReceiveApplied = false;
+    statusMsg.textContent = '❌ QR inválido ou corrompido. Tente de novo.';
+    statusMsg.className = 'sync-status err'; statusMsg.style.display = 'block';
+  }
+}
+
+function mergeDiario(incoming) {
+  Object.keys(incoming).forEach(k => {
+    if (!diario[k]) diario[k] = incoming[k];
+    else {
+      if (incoming[k].worked) diario[k].worked = incoming[k].worked;
+      if (incoming[k].next) diario[k].next = incoming[k].next;
+    }
+  });
+}
+
+// ==================== 7. PAINEL ====================
+function renderShiftStatus() {
+  const shift = currentShift();
+  const interval = currentInterval();
+  const badge = document.getElementById('shiftBadge');
+  const info = document.getElementById('shiftInfo');
+  const now = nowMin();
+  const dias = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const hojeNome = dias[new Date().getDay()];
+  const isWeekend = hojeNome === 'Sábado' || hojeNome === 'Domingo';
+  if (interval) {
+    const remain = timeToMin(interval.end) - now;
+    badge.className = 'shift-badge interval'; badge.textContent = `⏸️ Intervalo ${interval.turno} — ${remain} min`;
+    info.className = 'shift-info interval';
+    info.innerHTML = `<strong>⏸️ Intervalo ${interval.turno} em andamento</strong> · Das <strong>${interval.start}</strong> às <strong>${interval.end}</strong> · Faltam <strong>${remain} min</strong>.`;
+    return;
+  }
+  info.className = 'shift-info';
+  if (shift) {
+    const s = SHIFTS[shift]; const remain = timeToMin(s.end) - now;
+    badge.className = 'shift-badge open'; badge.textContent = `🟢 ${shift} — ${remain} min`;
+    info.innerHTML = `<strong>🟢 Expediente ${shift} em andamento</strong> · Das <strong>${s.start}</strong> às <strong>${s.end}</strong> · Faltam <strong>${remain} min</strong>.`;
+  } else {
+    let nextShift = null;
+    for (const [name, s] of Object.entries(SHIFTS)) { if (now < timeToMin(s.start)) { nextShift = { name, s }; break; } }
+    badge.className = 'shift-badge closed';
+    if (isWeekend) { badge.textContent = '⚪ Fim de semana'; info.innerHTML = '⚪ Fim de semana — sem expediente.'; }
+    else if (nextShift) { const wait = timeToMin(nextShift.s.start) - now; badge.textContent = `⚪ Fechado — próximo em ${wait} min`; info.innerHTML = `⚪ Fora do expediente. Próximo turno: <strong>${nextShift.name}</strong> às <strong>${nextShift.s.start}</strong> (em <strong>${wait} min</strong>).`; }
+    else { badge.textContent = '⚪ Fora do expediente'; info.innerHTML = '⚪ Expediente encerrado por hoje.'; }
+  }
+}
+
+function renderPainel() {
+  const filterProf = document.getElementById('filterProfPainel').value;
+  const n = nowMin();
+  const colEm = document.getElementById('colEm'), colProx = document.getElementById('colProx'), colSaiu = document.getElementById('colSaiu');
+  let { emSala, proximos, saidos } = groupTeachers();
+  if (clearedSaidos.date === todayKey()) {
+    const active = new Set([...emSala.map(x=>x.prof), ...proximos.map(x=>x.prof)]);
+    clearedSaidos.profs = clearedSaidos.profs.filter(p => !active.has(p));
+    saidos = saidos.filter(x => !clearedSaidos.profs.includes(x.prof));
+  }
+  function renderCards(list, tipo) {
+    let html = '';
+    list.forEach(item => {
+      if (filterProf && item.prof !== filterProf) return;
+      const c = item.cls; const color = profColor(item.prof);
+      const inMin = timeToMin(c.inicio), endMin = timeToMin(c.fim);
+      let progHtml = '', timeHtml = '';
+      if (tipo === 'em') {
+        const total = endMin - inMin, passed = n - inMin;
+        const pct = Math.min(100, Math.max(0, (passed/total)*100));
+        progHtml = `<div class="prof-progress"><div class="prof-progress-bar" style="width:${pct}%"></div></div>`;
+        timeHtml = `Restam ${endMin - n} min`;
+      } else if (tipo === 'prox') { timeHtml = `Em ${inMin - n} min (${c.inicio}–${c.fim})`; }
+      else { timeHtml = `Saiu às ${c.fim}`; }
+      html += `<div class="prof-card ${tipo}" style="--cor:${color}">
+        <div class="prof-avatar" style="background:${color}">${escapeHtml(item.prof.substring(0,2))}</div>
+        <div class="prof-info"><div class="prof-name">${escapeHtml(item.prof)}</div>
+          <div class="prof-class">${escapeHtml(c.disciplina)} • ${escapeHtml(c.turma)}</div>
+          <div class="prof-time">${escapeHtml(c.inicio)}–${escapeHtml(c.fim)} · ${escapeHtml(timeHtml)}</div>${progHtml}</div></div>`;
+    });
+    return html;
+  }
+  document.getElementById('countEm').textContent = emSala.filter(x => !filterProf || x.prof === filterProf).length;
+  document.getElementById('countProx').textContent = proximos.filter(x => !filterProf || x.prof === filterProf).length;
+  document.getElementById('countSaiu').textContent = saidos.filter(x => !filterProf || x.prof === filterProf).length;
+  colEm.innerHTML = renderCards(emSala, 'em') || '<div class="col-empty">Ninguém em sala</div>';
+  colProx.innerHTML = renderCards(proximos, 'prox') || '<div class="col-empty">Sem próximas</div>';
+  colSaiu.innerHTML = renderCards(saidos, 'saiu') || '<div class="col-empty">Ninguém saiu</div>';
+}
+
+// ==================== 8. FILA ====================
+function renderFila() {
+  const hoje = getDiaSemana(new Date());
+  const filtro = document.getElementById('filterProfFila').value;
+  const n = nowMin();
+  const wrap = document.getElementById('filaList');
+  const upcoming = schedule.filter(c => c.dia === hoje && !c.isPlanning && timeToMin(c.inicio) >= n).filter(c => !filtro || c.professor === filtro).sort((a,b) => timeToMin(a.inicio) - timeToMin(b.inicio));
+  if (upcoming.length === 0) { wrap.innerHTML = '<div class="empty-state">' + (hoje === 'Sábado' || hoje === 'Domingo' ? 'Sem aulas hoje.' : 'Sem mais aulas hoje.') + '</div>'; return; }
+  let html = '';
+  upcoming.forEach(c => {
+    const wait = timeToMin(c.inicio) - n;
+    const cls = wait === 0 ? 'now' : (wait <= 10 ? 'urgent' : '');
+    const label = wait === 0 ? 'AGORA' : 'em ' + wait + ' min';
+    const shiftIcon = c.turno === 'matutino' ? '🌅' : '🌇';
+    html += `<div class="fila-item" style="--cor:${profColor(c.professor)}">
+      <div class="fila-time">${escapeHtml(c.inicio)}–${escapeHtml(c.fim)}</div>
+      <div><div class="fila-prof">${escapeHtml(c.professor)} <span style="font-size:.75rem;opacity:.7;">${shiftIcon}</span></div>
+        <div class="fila-class">${escapeHtml(c.disciplina)} • Turma ${escapeHtml(c.turma)}</div></div>
+      <div class="fila-countdown ${cls}">${label}</div></div>`;
+  });
+  wrap.innerHTML = html;
+}
+
+// ==================== 9. HISTÓRICO ====================
+function addLog(tipo, cls) {
+  const d = new Date();
+  const evt = { ts: d.getTime(), tipo, prof: cls.professor, disc: cls.disciplina, turma: cls.turma, inicio: cls.inicio, fim: cls.fim, date: todayKey() };
+  log.push(evt);
+  saveState(); renderHistorico();
+  if (typeof pushEventToFirebase === 'function') pushEventToFirebase(evt);
+}
+function renderHistorico() {
+  const dateFilter = document.getElementById('histDate').value || todayKey();
+  const profFilter = document.getElementById('histFilterProf').value;
+  const tipoFilter = document.getElementById('histFilterTipo').value;
+  let items = log.filter(e => e.date === dateFilter);
+  if (profFilter) items = items.filter(e => e.prof === profFilter);
+  if (tipoFilter === 'ini') items = items.filter(e => e.tipo === 'auto_inicio' || e.tipo === 'man_inicio');
+  if (tipoFilter === 'fim') items = items.filter(e => e.tipo === 'auto_fim' || e.tipo === 'man_fim');
+  if (tipoFilter === 'alert') items = items.filter(e => e.tipo === 'alert');
+  items.sort((a,b) => b.ts - a.ts);
+  const wrap = document.getElementById('histTableWrap');
+  if (items.length === 0) { wrap.innerHTML = '<div class="empty-state">Nenhum evento.</div>'; return; }
+  const tipoLabel = { auto_inicio: ['tag auto-ini','Início (auto)'], auto_fim: ['tag auto-fim','Fim (auto)'], man_inicio: ['tag man-ini','Check-in'], man_fim: ['tag man-fim','Check-out'], alert: ['tag alert','Alerta'] };
+  let html = `<table class="hist-table"><thead><tr><th>Hora</th><th>Professor</th><th>Disc.</th><th>Turma</th><th>Evento</th></tr></thead><tbody>`;
+  items.forEach(e => {
+    const d = new Date(e.ts);
+    const hora = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    const [cls, label] = tipoLabel[e.tipo] || ['tag', e.tipo];
+    html += `<tr><td>${hora}</td><td><strong style="color:${profColor(e.prof)}">${escapeHtml(e.prof)}</strong></td><td>${escapeHtml(e.disc)}</td><td>${escapeHtml(e.turma)}</td><td><span class="${cls}">${label}</span></td></tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+function exportCSV() {
+  const dateFilter = document.getElementById('histDate').value || todayKey();
+  const items = log.filter(e => e.date === dateFilter);
+  if (items.length === 0) { showToast('Nada para exportar','Sem eventos.','err'); return; }
+  const tipoLabel = { auto_inicio:'Início (auto)', auto_fim:'Fim (auto)', man_inicio:'Check-in', man_fim:'Check-out', alert:'Alerta' };
+  let csv = 'Data,Hora,Professor,Disciplina,Turma,Evento\n';
+  items.sort((a,b) => a.ts - b.ts).forEach(e => {
+    const d = new Date(e.ts);
+    const hora = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+    csv += `${e.date},${hora},"${e.prof}","${e.disc}","${e.turma}","${tipoLabel[e.tipo] || e.tipo}"\n`;
+  });
+  const blob = new Blob(['\ufeff'+csv], { type:'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `historico-${dateFilter}.csv`; a.click();
+}
+
+// ==================== 10. GRADE ====================
+function renderGrade() {
+  const turno = document.getElementById('gradeTurno').value;
+  const dia = document.getElementById('gradeDia').value;
+  const profFilter = document.getElementById('gradeProf').value;
+  const g = RAW[turno];
+  const grid = document.getElementById('gradeGrid');
+  if (!g || !g.data[dia]) { grid.innerHTML = '<div class="empty-state">Sem dados.</div>'; return; }
+  const s = SHIFTS[turno], iv = INTERVALS[turno];
+  document.getElementById('gradeShiftInfo').innerHTML = `🕐 Expediente <strong>${turno}</strong>: <strong>${s.start} – ${s.end}</strong> · Intervalo: <strong>${iv.start} – ${iv.end}</strong>.`;
+  let html = '<div class="grade-cell header">Aula</div>';
+  (g.turmas || []).forEach(t => { html += `<div class="grade-cell header">${t}</div>`; });
+  ['1ª','2ª','3ª','4ª','5ª','6ª'].forEach(aula => {
+    const times = g.times && g.times[aula] ? g.times[aula] : ['--:--','--:--'];
+    const isNP = aula === '6ª';
+    html += `<div class="grade-cell hora">${aula}<br><span style="font-size:.65rem;font-weight:400;">${times[0]}</span>${isNP?'<br><span style="font-size:.6rem;color:#b91c1c;">fora</span>':''}</div>`;
+    const classList = g.data[dia][aula] || [];
+    classList.forEach((cell, i) => {
+      if (!cell) { html += '<div class="grade-cell empty">—</div>'; return; }
+      const [disc, prof] = cell.split('|');
+      if (profFilter && prof !== profFilter) { html += '<div class="grade-cell empty">—</div>'; return; }
+      const cls = { turno, dia, aula, turma: g.turmas[i], disciplina: disc, professor: prof, inicio: times[0], fim: times[1], isPlanning: isNP };
+      const st = getStatus(cls);
+      const color = profColor(prof);
+      const stLabel = st === 'em_sala' ? 'Em sala' : st === 'saiu' ? 'Saiu' : st === 'agendado' ? 'Agendado' : isNP ? 'NP' : '';
+      const cls2 = st === 'em_sala' ? 'em' : st === 'saiu' ? 'saiu' : isNP ? 'planning' : '';
+      html += `<div class="grade-cell ${cls2}" style="--cor:${color}"><div class="grade-disc">${escapeHtml(disc)}</div><div class="grade-prof">${escapeHtml(prof)}</div><div class="grade-status" style="color:${color}">${stLabel}</div></div>`;
+    });
+  });
+  grid.innerHTML = html;
+}
+
+// ==================== 11. SEMANA ====================
+function renderSemana() {
+  const wrap = document.getElementById('semanaContent'); if (!wrap) return;
+  const profFilter = document.getElementById('semanaProf').value;
+  const dias = ['Segunda','Terça','Quarta','Quinta','Sexta'];
+  const hoje = getDiaSemana(new Date());
+  let classes = schedule.filter(c => !c.isPlanning && dias.includes(c.dia));
+  if (profFilter) classes = classes.filter(c => c.professor === profFilter);
+  if (classes.length === 0) { wrap.innerHTML = '<div class="empty-state">Sem aulas com este filtro.</div>'; return; }
+  const matClasses = classes.filter(c => c.turno === 'matutino');
+  const vespClasses = classes.filter(c => c.turno === 'vespertino');
+  let html = `<div class="week-summary">
+    <div class="week-summary-item total"><span class="num">${classes.length}</span><span class="lbl">aulas na semana</span></div>
+    <div class="week-summary-item mat"><span class="num">${matClasses.length}</span><span class="lbl">🌅 manhã</span></div>
+    <div class="week-summary-item vesp"><span class="num">${vespClasses.length}</span><span class="lbl">🌇 tarde</span></div>
+  </div>`;
+  [{ key: 'matutino', label: '🌅 Manhã', classes: matClasses, shiftInfo: SHIFTS.matutino, cls: 'mat' }, { key: 'vespertino', label: '🌇 Tarde', classes: vespClasses, shiftInfo: SHIFTS.vespertino, cls: 'vesp' }].forEach(t => {
+    if (t.classes.length === 0) return;
+    html += `<div class="week-section"><div class="week-shift-header ${t.cls}"><h2>${t.label}</h2><span class="week-shift-meta">${t.shiftInfo.start}–${t.shiftInfo.end} • ${t.classes.length} aulas</span></div><div class="week-grid">`;
+    dias.forEach(dia => {
+      const dayClasses = t.classes.filter(c => c.dia === dia).sort((a,b) => timeToMin(a.inicio) - timeToMin(b.inicio));
+      const isToday = dia === hoje;
+      html += `<div class="week-day ${isToday ? 'today' : ''}"><div class="week-day-header"><span>${dia.substring(0,3)}</span>${isToday ? '<span class="today-badge">HOJE</span>' : ''}<span class="week-day-count">${dayClasses.length}</span></div><div class="week-day-body">`;
+      if (dayClasses.length === 0) html += `<div class="week-empty">Sem aulas</div>`;
+      else dayClasses.forEach(c => {
+        html += `<div class="week-class" style="border-left-color:${profColor(c.professor)};"><div class="week-class-time">${c.inicio}–${c.fim}</div><div class="week-class-disc">${escapeHtml(c.disciplina)}</div><div class="week-class-prof">${escapeHtml(c.professor)}</div><div class="week-class-turma">Turma ${escapeHtml(c.turma)}</div></div>`;
+      });
+      html += `</div></div>`;
+    });
+    html += `</div></div>`;
+  });
+  wrap.innerHTML = html;
+}
+
+// ==================== 12. MINHAS AULAS ====================
+function getNextSchoolDayInfo() {
+  const d = new Date();
+  do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+  return { name: getDiaSemana(d), dateStr: `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}` };
+}
+function renderMinhasAulas(profName) {
+  const container = document.getElementById('profAulasResultado');
+  if (!profName || profName.trim() === '') { container.innerHTML = ''; return; }
+  const searchName = profName.trim().toLowerCase();
+  const hoje = getDiaSemana(new Date());
+  const nextDayInfo = getNextSchoolDayInfo();
+  const nextDay = nextDayInfo.name;
+  const allProfClasses = schedule.filter(c => c.professor.toLowerCase() === searchName && !c.isPlanning);
+  if (allProfClasses.length === 0) { container.innerHTML = `<div class="empty-state">Nenhuma aula para "<b>${escapeHtml(profName)}</b>".</div>`; return; }
+  function renderDayCard(title, list, extraTag) {
+    const mat = list.filter(c => c.turno === 'matutino');
+    const vesp = list.filter(c => c.turno === 'vespertino');
+    let html = `<div class="agenda-card"><div class="agenda-header"><span>${title}</span>${list.length > 0 ? `<span class="tag-turno">${mat.length} manhã · ${vesp.length} tarde</span>` : ''}</div>`;
+    if (list.length === 0) return html + `<div class="empty-state" style="padding:20px;font-size:.9rem;">Você não tem aulas ${extraTag}.</div></div>`;
+    if (mat.length > 0) { html += `<div class="agenda-shift-header">🌅 Manhã <span class="count-badge">${mat.length}</span></div>`; mat.forEach(c => { html += `<div class="agenda-item"><div class="agenda-time">${c.inicio} - ${c.fim}<span>${c.aula} Aula</span></div><div class="agenda-info"><div class="disc">${escapeHtml(c.disciplina)}</div><div class="turma">Turma: <strong>${escapeHtml(c.turma)}</strong></div></div></div>`; }); }
+    if (vesp.length > 0) { html += `<div class="agenda-shift-header">🌇 Tarde <span class="count-badge">${vesp.length}</span></div>`; vesp.forEach(c => { html += `<div class="agenda-item"><div class="agenda-time">${c.inicio} - ${c.fim}<span>${c.aula} Aula</span></div><div class="agenda-info"><div class="disc">${escapeHtml(c.disciplina)}</div><div class="turma">Turma: <strong>${escapeHtml(c.turma)}</strong></div></div></div>`; }); }
+    return html + `</div>`;
+  }
+  const todayClasses = allProfClasses.filter(c => c.dia === hoje).sort((a,b) => timeToMin(a.inicio) - timeToMin(b.inicio));
+  const nextClasses = allProfClasses.filter(c => c.dia === nextDay).sort((a,b) => timeToMin(a.inicio) - timeToMin(b.inicio));
+  container.innerHTML = renderDayCard(`📅 Hoje (${hoje})`, todayClasses, 'hoje') + renderDayCard(`📅 Próximo dia letivo (${nextDay} - ${nextDayInfo.dateStr})`, nextClasses, 'neste dia');
+}
+
+// ==================== 13. FILTROS ====================
+function populateProfDatalist() {
+  const profs = [...new Set(schedule.filter(c => !c.isPlanning).map(c => c.professor))].sort();
+  const datalist = document.getElementById('profList');
+  if (datalist) datalist.innerHTML = profs.map(p => `<option value="${escapeHtml(p)}">`).join('');
+}
+function populateProfFilters() {
+  const profs = [...new Set(schedule.filter(c => !c.isPlanning).map(c => c.professor))].sort();
+  const opts = '<option value="">Todos</option>' + profs.map(p => `<option>${escapeHtml(p)}</option>`).join('');
+  ['filterProfPainel','filterProfFila','histFilterProf','gradeProf','semanaProf'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    const current = el.value;
+    el.innerHTML = opts; el.value = current;
+  });
+  populateProfDatalist();
+}
+
+// ==================== 14. NEWS TICKER ====================
+function updateNewsTicker() {
+  const hoje = getDiaSemana(new Date());
+  const now = nowMin();
+  const shift = currentShift();
+  const isAfterHours = !shift && now > timeToMin(SHIFTS.vespertino.end);
+  const isWeekend = hoje === 'Sábado' || hoje === 'Domingo';
+  const news = [];
+  if (isWeekend || isAfterHours) {
+    const nextDayInfo = getNextSchoolDayInfo();
+    const nextDayClasses = schedule.filter(c => c.dia === nextDayInfo.name && !c.isPlanning);
+    if (nextDayClasses.length === 0) news.push(`📅 <b>Programação para ${nextDayInfo.name}:</b> Não há aulas programadas. Bom descanso!`);
+    else {
+      news.push(`📅 <b>Programação para ${nextDayInfo.name}:</b>`);
+      const byProf = {}; nextDayClasses.forEach(c => { (byProf[c.professor] = byProf[c.professor] || []).push(c); });
+      Object.keys(byProf).sort().forEach(prof => {
+        const classes = byProf[prof];
+        const mat = classes.filter(c => c.turno === 'matutino').length;
+        const vesp = classes.filter(c => c.turno === 'vespertino').length;
+        let desc = `<b>${prof}</b> terá ${classes.length} aula(s)`;
+        if (mat > 0 && vesp > 0) desc += ` (${mat} manhã, ${vesp} tarde)`;
+        else if (mat > 0) desc += ` (manhã)`;
+        else desc += ` (tarde)`;
+        news.push(desc + '.');
+      });
+    }
+  } else {
+    const todayClasses = schedule.filter(c => c.dia === hoje && !c.isPlanning);
+    const { emSala, proximos } = groupTeachers();
+    emSala.forEach(x => news.push(`🟢 <b>${x.prof}</b> na turma <b>${x.cls.turma}</b> (${x.cls.disciplina}) até ${x.cls.fim}.`));
+    proximos.forEach(x => { const wait = timeToMin(x.cls.inicio) - now; if (wait > 0 && wait <= 20) news.push(`⏰ <b>${x.prof}</b> tem aula na turma <b>${x.cls.turma}</b> em ${wait} min.`); });
+    if (shift === 'matutino') {
+      const afternoon = todayClasses.filter(c => c.turno === 'vespertino');
+      if (afternoon.length > 0) { const byProf = {}; afternoon.forEach(c => { byProf[c.professor] = (byProf[c.professor] || 0) + 1; }); news.push(`🌇 <b>Tarde:</b> ${Object.entries(byProf).map(([p, c]) => `${p} (${c})`).join(', ')}.`); }
+    }
+  }
+  if (news.length === 0) news.push('☕ Não há mais aulas programadas. Bom descanso!');
+  const text = news.join(' &nbsp;&nbsp;&nbsp; ⚡ &nbsp;&nbsp;&nbsp; ');
+  const tickerEl = document.getElementById('newsTickerText');
+  if (tickerEl && tickerEl.innerHTML !== text) tickerEl.innerHTML = text;
+}
+
+// ==================== 15. RENDER ALL ====================
+function renderAll() {
+  renderShiftStatus();
+  renderPainel();
+  renderFila();
+  renderHistorico();
+  renderGrade();
+  renderSemana();
+  updateNewsTicker();
+  renderAssistente();
+  const searchVal = document.getElementById('profSearchInput').value;
+  if (searchVal) renderMinhasAulas(searchVal);
+}
+
+// ==================== 16. TOASTS + ÁUDIO ====================
+function showToast(title, msg, kind) {
+  const wrap = document.getElementById('toasts'); if (!wrap) return;
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.innerHTML = `<strong>${escapeHtml(title)}</strong><small>${escapeHtml(msg)}</small>`;
+  wrap.appendChild(el);
+  setTimeout(() => { el.style.transition = 'opacity .4s, transform .4s'; el.style.opacity = '0'; el.style.transform = 'translateX(120%)'; setTimeout(() => el.remove(), 400); }, 5000);
+}
+function getAudioCtx() { if (!audioCtx) { try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){ return null; } } if (audioCtx.state === 'suspended') audioCtx.resume(); return audioCtx; }
+function warmAudio() { if (audioWarmed) return; audioWarmed = true; getAudioCtx(); }
+function playBeep(pattern) {
+  const ctx = getAudioCtx(); if (!ctx) return;
+  const now = ctx.currentTime;
+  const pat = pattern || [{freq:880,start:0,dur:.12},{freq:880,start:.18,dur:.12},{freq:1318,start:.36,dur:.28}];
+  pat.forEach(p => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type='sine'; o.frequency.value=p.freq;
+    g.gain.setValueAtTime(.0001, now+p.start);
+    g.gain.linearRampToValueAtTime(.3, now+p.start+.015);
+    g.gain.setValueAtTime(.3, now+p.start+p.dur-.02);
+    g.gain.exponentialRampToValueAtTime(.0001, now+p.start+p.dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(now+p.start); o.stop(now+p.start+p.dur+.02);
+  });
+}
+
+// ==================== 17. EVENTOS ====================
+function checkEvents() {
+  const now = new Date();
+  const dayKey = now.toDateString();
+  if (dayKey !== lastDayKey) { lastDayKey = dayKey; firedEvents.clear(); }
+  const minuteKey = dayKey+'-'+nowMin();
+  if (minuteKey === lastMinuteKey) return;
+  lastMinuteKey = minuteKey;
+  const shift = currentShift();
+  const hoje = getDiaSemana(now);
+  const n = nowMin();
+  if (shift) {
+    schedule.filter(c => c.dia === hoje && !c.isPlanning && c.turno === shift).forEach(c => {
+      const key = scheduleKey(c);
+      const s = timeToMin(c.inicio), e = timeToMin(c.fim);
+      const alertAt = s - settings.leadMinutes;
+      if (n >= alertAt && n < alertAt + 2 && !firedEvents.has(key+'|alert')) {
+        firedEvents.add(key+'|alert'); if (settings.alerts) playBeep();
+        showToast(`⏰ Em ${settings.leadMinutes} min`, `${c.professor} • ${c.disciplina}`);
+        addLog('alert', c);
+      }
+      if (n === s && !firedEvents.has(key+'|start')) {
+        firedEvents.add(key+'|start');
+        if (settings.alerts) playBeep([{freq:660,start:0,dur:.15},{freq:990,start:.2,dur:.25}]);
+        showToast(`🟢 Aula iniciou`, `${c.professor} • ${c.disciplina}`, 'ok');
+        addLog('auto_inicio', c);
+      }
+      if (n === e && !firedEvents.has(key+'|end')) {
+        firedEvents.add(key+'|end');
+        if (settings.alerts) playBeep([{freq:440,start:0,dur:.15},{freq:330,start:.2,dur:.25}]);
+        showToast(`🚪 Aula encerrada`, `${c.professor} • ${c.disciplina}`);
+        addLog('auto_fim', c);
+      }
+    });
+  }
+  checkVoiceAnnouncements();
+  renderShiftStatus(); renderPainel(); renderFila(); updateNewsTicker(); renderAssistente();
+}
+
+// ==================== 18. RELÓGIO ====================
+function tickClock() {
+  const d = new Date();
+  const clockEl = document.getElementById('clock');
+  if (simulatedTime) { clockEl.textContent = `${simulatedTime}:${String(d.getSeconds()).padStart(2,'0')} (SIM)`; clockEl.classList.add('simulated'); }
+  else { const h = String(d.getHours()).padStart(2,'0'), m = String(d.getMinutes()).padStart(2,'0'), s = String(d.getSeconds()).padStart(2,'0'); clockEl.textContent = `${h}:${m}:${s}`; clockEl.classList.remove('simulated'); }
+  const dias = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+  const meses = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  document.getElementById('date').textContent = `${dias[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]}`;
+}
+
+// ==================== 19. EXCEL ====================
+function processExcelFile(file, targetShift) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, {type: 'array'});
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header: 1});
+      let parsedSchedule = { times: JSON.parse(JSON.stringify(RAW[targetShift].times)), turmas: [], data: {} };
+      let currentDay = ''; let turmasFound = false;
+      rows.forEach(row => {
+        if (!turmasFound) {
+          const startIdx = row.findIndex(cell => typeof cell === 'string' && (/^\d+\.\d+$/.test(cell.trim()) || cell.trim().toUpperCase().includes('JORNADA')));
+          if (startIdx !== -1) {
+            parsedSchedule.turmas = row.slice(startIdx, startIdx + 4).map(t => { let s = String(t).trim(); return (s.toUpperCase().includes('JORNADA')) ? 'JA' : s; });
+            turmasFound = true;
+          }
+        }
+        const days = ['SEGUNDA','TERÇA','QUARTA','QUINTA','SEXTA'];
+        let dayCell = row.find(cell => typeof cell === 'string' && days.includes(cell.toUpperCase().trim()));
+        if (dayCell) { let d = dayCell.charAt(0).toUpperCase() + dayCell.slice(1).toLowerCase(); currentDay = d; if (!parsedSchedule.data[currentDay]) parsedSchedule.data[currentDay] = {}; }
+        const periodCell = row.find(cell => typeof cell === 'string' && /^\dª$/.test(cell.trim()));
+        if (periodCell && currentDay) {
+          const period = periodCell.trim();
+          const periodIdx = row.indexOf(periodCell);
+          const classData = row.slice(periodIdx + 1, periodIdx + 5);
+          parsedSchedule.data[currentDay][period] = classData.map(cell => {
+            if (!cell) return null;
+            let str = String(cell).trim().toUpperCase();
+            if (!str) return null;
+            const DISC_MAP = { 'MATEMÁTICA': 'Mat', 'MAT': 'Mat', 'PORTUGUÊS': 'Port', 'PORT': 'Port', 'FILOSOFIA': 'Fil', 'FIL': 'Fil', 'ARTES': 'Art', 'ART': 'Art', 'QUÍMICA': 'Quí', 'QUI': 'Quí', 'FÍSICA': 'Fís', 'FIS': 'Fís', 'IFA I': 'IFA I', 'IFA II': 'IFA II', 'BIOLOGIA': 'Bio', 'BIO': 'Bio', 'INGLÊS': 'Ing', 'ING': 'Ing', 'SOCIOLOGIA': 'Soc', 'SOC': 'Soc', 'HISTÓRIA': 'Hist', 'HIST': 'Hist', 'GEOGRAFIA': 'Geo', 'GEO': 'Geo', 'DESPORTO': 'Desp', 'DESP': 'Desp', 'ED. FÍSICA': 'EdFís', 'EDFIS': 'EdFís', 'REDAÇÃO': 'Red', 'RED': 'Red', 'PRODUÇÃO': 'Produção', 'PROD': 'Produção' };
+            let parts = str.split('-');
+            if (parts.length >= 2) {
+              let discRaw = parts[0].trim(), prof = parts[1].trim();
+              prof = prof.charAt(0).toUpperCase() + prof.slice(1).toLowerCase();
+              let shortDisc = discRaw;
+              for (let key in DISC_MAP) { if (discRaw.includes(key)) { shortDisc = DISC_MAP[key]; break; } }
+              return `${shortDisc}|${prof}`;
+            }
+            return null;
+          });
+        }
+      });
+      RAW[targetShift] = parsedSchedule;
+      saveState();
+      const statusId = targetShift === 'matutino' ? 'statusMat' : 'statusVesp';
+      document.getElementById(statusId).innerHTML = `Status: <span style="color:#10b981">Importado! (${new Date().toLocaleTimeString()})</span>`;
+      showToast('Grade Importada', `${targetShift} atualizado.`, 'ok');
+      schedule = buildSchedule(); populateProfFilters(); renderAll();
+    } catch (err) { console.error(err); showToast('Erro no Excel', 'Verifique o arquivo.', 'err'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ==================== 20. TABS ====================
+function setupTabs() {
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      const tabId = btn.dataset.tab;
+      const section = document.getElementById('tab-'+tabId); if (section) section.classList.add('active');
+      if (tabId === 'grade') renderGrade();
+      if (tabId === 'historico') renderHistorico();
+      if (tabId === 'fila') renderFila();
+      if (tabId === 'semana') renderSemana();
+      if (tabId === 'minhasaulas') setTimeout(() => { const i = document.getElementById('profSearchInput'); if (i) i.focus(); }, 100);
+      if (tabId === 'assistente') {
+        warmSpeech(); renderAssistente();
+        if (voiceState.meuProf && voiceState.enabled && voiceState.summary) {
+          const sKey = todayKey() + '|' + voiceState.meuProf;
+          if (voiceState.lastSummary !== sKey) { voiceState.lastSummary = sKey; saveVoiceState(); setTimeout(() => speakSummary(true), 400); }
+        }
+      }
+      if (tabId === 'voz') populateVoiceList();
+    });
+  });
+}
+
+// ==================== 21. SETUP UI ====================
+function setupUI() {
+  document.getElementById('filterProfPainel').addEventListener('change', renderPainel);
+  document.getElementById('filterProfFila').addEventListener('change', renderFila);
+  document.getElementById('histFilterProf').addEventListener('change', renderHistorico);
+  document.getElementById('histFilterTipo').addEventListener('change', renderHistorico);
+  document.getElementById('histDate').addEventListener('change', renderHistorico);
+  document.getElementById('gradeProf').addEventListener('change', renderGrade);
+  document.getElementById('gradeTurno').addEventListener('change', renderGrade);
+  document.getElementById('gradeDia').addEventListener('change', renderGrade);
+  document.getElementById('semanaProf').addEventListener('change', renderSemana);
+  document.getElementById('btnImprimirSemana').addEventListener('click', () => window.print());
+  document.getElementById('profSearchInput').addEventListener('input', (e) => renderMinhasAulas(e.target.value));
+
+  document.getElementById('btnClearSaidos').addEventListener('click', () => {
+    const { saidos } = groupTeachers();
+    if (saidos.length === 0) { showToast('Lista vazia', 'Não há professores que já saíram.'); return; }
+    if (clearedSaidos.date !== todayKey()) clearedSaidos = { date: todayKey(), profs: [] };
+    clearedSaidos.profs = [...new Set([...clearedSaidos.profs, ...saidos.map(x => x.prof)])];
+    saveJSON('fluxo.clearedSaidos', clearedSaidos); renderPainel();
+    showToast('Lista limpa', 'Professores que já saíram foram ocultados.');
+  });
+
+  const btnToggleSoundPanel = document.getElementById('btnToggleSoundPanel');
+  function updateSoundBtn() { if (btnToggleSoundPanel) { btnToggleSoundPanel.textContent = settings.alerts ? '🔔 Som ON' : '🔕 Som OFF'; btnToggleSoundPanel.style.background = settings.alerts ? '#fff' : '#f3f4f6'; } }
+  updateSoundBtn();
+  btnToggleSoundPanel.addEventListener('click', () => {
+    settings.alerts = !settings.alerts; saveState(); updateSoundBtn();
+    document.getElementById('cfgAlerts').checked = settings.alerts;
+    showToast(settings.alerts ? 'Som Ativado' : 'Som Desativado', 'Bip alterado.');
+    if (settings.alerts) { warmAudio(); playBeep(); }
+  });
+
+  document.getElementById('btnUploadMat').addEventListener('click', () => {
+    const file = document.getElementById('excelFileMat').files[0];
+    if (!file) { showToast('Aviso', 'Selecione a planilha do Matutino.', 'err'); return; }
+    processExcelFile(file, 'matutino'); document.getElementById('excelFileMat').value = '';
+  });
+  document.getElementById('btnUploadVesp').addEventListener('click', () => {
+    const file = document.getElementById('excelFileVesp').files[0];
+    if (!file) { showToast('Aviso', 'Selecione a planilha do Vespertino.', 'err'); return; }
+    processExcelFile(file, 'vespertino'); document.getElementById('excelFileVesp').value = '';
+  });
+
+  document.getElementById('btnApplySim').addEventListener('click', () => {
+    const timeVal = document.getElementById('simTimeInput').value;
+    if (!timeVal) { showToast('Aviso', 'Escolha um horário.', 'err'); return; }
+    simulatedTime = timeVal;
+    document.getElementById('btnClearSim').style.display = 'inline-flex';
+    firedEvents.clear(); lastMinuteKey = ''; voiceState.fired = []; saveVoiceState();
+    renderAll(); checkEvents();
+    showToast('Simulação Ativa', `Painel ajustado para ${simulatedTime}`, 'ok');
+  });
+  document.getElementById('btnClearSim').addEventListener('click', () => {
+    simulatedTime = null;
+    document.getElementById('btnClearSim').style.display = 'none';
+    firedEvents.clear(); lastMinuteKey = ''; voiceState.fired = []; saveVoiceState();
+    renderAll(); checkEvents();
+    showToast('Tempo Real', 'Painel voltou ao relógio do sistema.');
+  });
+  document.getElementById('btnRefresh').addEventListener('click', () => { renderAll(); showToast('Atualizado','Painel recarregado.'); });
+
+  document.getElementById('cfgAlerts').checked = settings.alerts;
+  document.getElementById('cfgLead').value = settings.leadMinutes;
+  document.getElementById('cfgDiogoMat').checked = settings.hideDiogoMat;
+  document.getElementById('cfgDiogoVesp').checked = settings.hideDiogoVesp;
+  document.getElementById('cfgMatStart').value = settings.matStart;
+  document.getElementById('cfgMatEnd').value = settings.matEnd;
+  document.getElementById('cfgMatIntStart').value = settings.matIntStart;
+  document.getElementById('cfgMatIntEnd').value = settings.matIntEnd;
+  document.getElementById('cfgVespStart').value = settings.vespStart;
+  document.getElementById('cfgVespEnd').value = settings.vespEnd;
+  document.getElementById('cfgVespIntStart').value = settings.vespIntStart;
+  document.getElementById('cfgVespIntEnd').value = settings.vespIntEnd;
+
+  document.getElementById('btnSaveTimes').addEventListener('click', () => {
+    settings.matStart = document.getElementById('cfgMatStart').value;
+    settings.matEnd = document.getElementById('cfgMatEnd').value;
+    settings.matIntStart = document.getElementById('cfgMatIntStart').value;
+    settings.matIntEnd = document.getElementById('cfgMatIntEnd').value;
+    settings.vespStart = document.getElementById('cfgVespStart').value;
+    settings.vespEnd = document.getElementById('cfgVespEnd').value;
+    settings.vespIntStart = document.getElementById('cfgVespIntStart').value;
+    settings.vespIntEnd = document.getElementById('cfgVespIntEnd').value;
+    applyTimeSettings(); saveState(); schedule = buildSchedule(); populateProfFilters(); renderAll();
+    showToast('Horários Salvos', 'Configurações atualizadas.', 'ok');
+  });
+
+  document.getElementById('cfgAlerts').addEventListener('change', e => {
+    settings.alerts = e.target.checked; saveState(); updateSoundBtn();
+    showToast(settings.alerts ? '🔔 Alertas ON' : '🔕 Alertas OFF', 'Salvo.');
+    if (settings.alerts) { warmAudio(); playBeep(); }
+  });
+  document.getElementById('cfgLead').addEventListener('change', e => { settings.leadMinutes = Math.max(1, Math.min(30, parseInt(e.target.value)||10)); e.target.value = settings.leadMinutes; saveState(); });
+  document.getElementById('cfgDiogoMat').addEventListener('change', e => { settings.hideDiogoMat = e.target.checked; saveState(); schedule = buildSchedule(); populateProfFilters(); renderAll(); });
+  document.getElementById('cfgDiogoVesp').addEventListener('change', e => { settings.hideDiogoVesp = e.target.checked; saveState(); schedule = buildSchedule(); populateProfFilters(); renderAll(); });
+
+  document.getElementById('btnTestSound').addEventListener('click', () => { warmAudio(); playBeep(); });
+  document.getElementById('btnFullscreen').addEventListener('click', () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{}); else document.exitFullscreen(); });
+
+  document.getElementById('btnExportJson').addEventListener('click', () => {
+    const blob = new Blob([JSON.stringify({ log, settings, rawSchedule: RAW, voice: voiceState, diario }, null, 2)], { type:'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `fluxo-backup-${todayKey()}.json`; a.click();
+  });
+
+  document.getElementById('btnImportJson').addEventListener('click', () => document.getElementById('importFile').click());
+  document.getElementById('importFile').addEventListener('change', e => {
+    const file = e.target.files[0]; if (!file) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      try {
+        const d = JSON.parse(ev.target.result);
+        if (d.log) log = d.log;
+        if (d.settings) Object.assign(settings, d.settings);
+        if (d.rawSchedule) RAW = d.rawSchedule;
+        if (d.voice) { voiceState = Object.assign(voiceState, d.voice); if (!Array.isArray(voiceState.fired)) voiceState.fired = []; }
+        if (d.diario) { diario = d.diario; saveDiario(); }
+        applyTimeSettings(); saveState(); saveVoiceState();
+        schedule = buildSchedule(); populateProfFilters(); renderAll(); syncVoiceUI();
+        showToast('Importado','Backup restaurado.','ok');
+      } catch(err) { showToast('Erro','JSON inválido.','err'); }
+    };
+    r.readAsText(file);
+  });
+
+  document.getElementById('btnResetAll').addEventListener('click', () => {
+    if (!confirm('Resetar todos os dados?')) return;
+    log = [];
+    settings = { alerts:true, leadMinutes:10, hideDiogoMat:false, hideDiogoVesp:false, version:SETTINGS_VERSION, matStart:'07:00', matEnd:'11:25', matIntStart:'09:30', matIntEnd:'09:45', vespStart:'13:00', vespEnd:'17:25', vespIntStart:'15:30', vespIntEnd:'15:45' };
+    simulatedTime = null;
+    document.getElementById('btnClearSim').style.display = 'none';
+    localStorage.removeItem('fluxo.rawSchedule');
+    localStorage.removeItem('fluxo.clearedSaidos');
+    localStorage.removeItem('fluxo.voice');
+    localStorage.removeItem('fluxo.diario');
+    location.reload();
+  });
+
+  document.getElementById('btnExportCsv').addEventListener('click', exportCSV);
+  document.getElementById('btnBackfill').addEventListener('click', backfillToday);
+
+  ['click','touchstart','keydown'].forEach(ev => document.addEventListener(ev, () => { warmAudio(); warmSpeech(); }, { passive:true }));
+  setupVoiceUI();
+  setupSyncUI();
+}
+
+// ==================== 22. BACKFILL ====================
+function backfillToday() {
+  const hoje = getDiaSemana(new Date());
+  const n = nowMin();
+  const dateStr = todayKey();
+  const existentes = new Set(log.filter(e => e.date === dateStr && (e.tipo === 'auto_inicio' || e.tipo === 'auto_fim')).map(e => e.prof+e.inicio+e.tipo));
+  let count = 0;
+  schedule.filter(c => c.dia === hoje && !c.isPlanning).forEach(c => {
+    const s = timeToMin(c.inicio), e = timeToMin(c.fim);
+    if (n >= s && !existentes.has(c.professor+c.inicio+'auto_inicio')) {
+      const d = new Date(); d.setHours(Math.floor(s/60), s%60, 0, 0);
+      log.push({ ts:d.getTime(), tipo:'auto_inicio', prof:c.professor, disc:c.disciplina, turma:c.turma, inicio:c.inicio, fim:c.fim, date:dateStr }); count++;
+    }
+    if (n >= e && !existentes.has(c.professor+c.inicio+'auto_fim')) {
+      const d = new Date(); d.setHours(Math.floor(e/60), e%60, 0, 0);
+      log.push({ ts:d.getTime(), tipo:'auto_fim', prof:c.professor, disc:c.disciplina, turma:c.turma, inicio:c.inicio, fim:c.fim, date:dateStr }); count++;
+    }
+  });
+  saveState(); renderHistorico();
+  showToast('Histórico gerado', count + ' eventos criados.');
+}
+
+// ==================== 23. PWA ====================
+function setupPWA() {
+  function getIconDataUrl(size) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size; canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#1e3a8a'; ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#ffffff'; ctx.font = `${size * 0.6}px sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🎓', size / 2, size / 2);
+    return canvas.toDataURL('image/png');
+  }
+  const manifest = { name: "Fluxo de Professores", short_name: "Fluxo", start_url: ".", display: "standalone", background_color: "#f5f7fb", theme_color: "#1e3a8a", icons: [{ src: getIconDataUrl(192), sizes: "192x192", type: "image/png" }, { src: getIconDataUrl(512), sizes: "512x512", type: "image/png" }] };
+  const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const link = document.createElement('link'); link.rel = 'manifest'; link.href = URL.createObjectURL(manifestBlob);
+  document.head.appendChild(link);
+  if ('serviceWorker' in navigator) {
+    const swCode = `self.addEventListener('install', (e) => self.skipWaiting());self.addEventListener('activate', (e) => e.waitUntil(clients.claim()));self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));`;
+    const swBlob = new Blob([swCode], { type: 'application/javascript' });
+    navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(err => console.log('SW bloqueado em file://'));
+  }
+  let deferredPrompt;
+  const btnInstall = document.getElementById('btnInstall');
+  const installHint = document.getElementById('installHint');
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; if (btnInstall) btnInstall.style.display = 'inline-flex'; if (installHint) installHint.style.display = 'none'; });
+  if (btnInstall) btnInstall.addEventListener('click', async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') { btnInstall.style.display = 'none'; showToast('Instalado', 'Atalho adicionado.', 'ok'); }
+      deferredPrompt = null;
+    }
+  });
+}
+
+// ==================== 24. INIT ====================
+async function init() {
+  await waitForFirebase();
+  try { await window.fb.signInAnonymously(window.fb.auth); } catch (e) { console.error('Auth anônimo falhou', e); }
+
+  const adminBtn = document.getElementById('btnAdminLogin');
+  if (adminBtn) adminBtn.onclick = showAdminLogin;
+  const exitBtn = document.getElementById('btnAdminExit');
+  if (exitBtn) exitBtn.onclick = () => { if (confirm('Sair do modo admin?')) doLogout(); };
+
+  const session = loadSession();
+  if (session && session.exp > Date.now()) {
+    currentUser = session;
+    if (session.isAdmin) {
+      document.getElementById('authOverlay').style.display = 'none';
+      openAdminPanel();
+      return;
+    }
+    try {
+      await loadAllFromFirebase();
+      document.getElementById('authOverlay').style.display = 'none';
+      startApp();
+      return;
+    } catch (e) {
+      console.warn('Sessão inválida, refazendo login', e);
+      clearSession();
+    }
+  }
+  showLoginScreen();
+}
+init();
+</script>
+</body>
+</html>
